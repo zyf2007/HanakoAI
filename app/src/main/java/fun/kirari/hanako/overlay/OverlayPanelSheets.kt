@@ -2,6 +2,7 @@ package `fun`.kirari.hanako.overlay
 
 import android.graphics.Bitmap
 import android.widget.Toast
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -9,14 +10,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -55,15 +61,23 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import `fun`.kirari.hanako.data.AssistantPreset
+import `fun`.kirari.hanako.data.ModelProviderConfig
 import `fun`.kirari.hanako.data.ModelPurpose
+import `fun`.kirari.hanako.data.ModelSelection
 import `fun`.kirari.hanako.data.ProcessingRoute
+import `fun`.kirari.hanako.data.displayName
 import `fun`.kirari.hanako.data.resolveModelName
 import `fun`.kirari.hanako.data.resolveModelProvider
 import `fun`.kirari.hanako.ui.cropBitmap
+import `fun`.kirari.hanako.network.ProviderModelsApi
+import `fun`.kirari.hanako.network.RemoteModelOption
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 
@@ -73,9 +87,13 @@ internal fun CropOverlaySheet(
     onClose: () -> Unit,
     onConfirm: (Bitmap) -> Unit,
     panelHeightPx: Int,
+    modelPickerTarget: ModelPurpose?,
+    onModelPickerTargetChange: (ModelPurpose?) -> Unit,
     onSelectAssistant: (String) -> Unit,
     onSelectPreviousAssistant: () -> Unit,
-    onSelectNextAssistant: () -> Unit
+    onSelectNextAssistant: () -> Unit,
+    onUpdateModelSelection: (ModelPurpose, ModelSelection) -> Unit,
+    onToggleProcessingRoute: () -> Unit
 ) {
     val bitmap = uiState.screenshot
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
@@ -84,26 +102,22 @@ internal fun CropOverlaySheet(
     val density = LocalDensity.current
     val selectedAssistant = uiState.settings.assistants.firstOrNull { it.id == uiState.settings.selectedAssistantId }
     val routeText = if (uiState.settings.processingRoute == ProcessingRoute.OCR_THEN_LLM) "OCR模式" else "多模态模式"
-    val activePurpose = if (uiState.settings.processingRoute == ProcessingRoute.OCR_THEN_LLM) {
-        ModelPurpose.TEXT
-    } else {
-        ModelPurpose.VISION
-    }
-    val activeProvider = uiState.settings.resolveModelProvider(activePurpose)
-    val activeModel = uiState.settings.resolveModelName(activePurpose)
-    val modelProviderText = buildString {
-        append(activeModel.ifBlank { "未配置模型" })
-        activeProvider?.name?.takeIf { it.isNotBlank() }?.let { providerName ->
-            append("（")
-            append(providerName)
-            append("）")
-        }
-    }
+    val ocrProvider = uiState.settings.resolveModelProvider(ModelPurpose.OCR)
+    val ocrModel = uiState.settings.resolveModelName(ModelPurpose.OCR)
+    val llmPurpose = if (uiState.settings.processingRoute == ProcessingRoute.OCR_THEN_LLM) ModelPurpose.TEXT else ModelPurpose.VISION
+    val llmProvider = uiState.settings.resolveModelProvider(llmPurpose)
+    val llmModel = uiState.settings.resolveModelName(llmPurpose)
     val selectionColor = MaterialTheme.colorScheme.primary
     val panelMaxHeight = with(density) { panelHeightPx.toDp() }
     var showAssistantDialog by remember { mutableStateOf(false) }
     var assistantPickerClosing by remember { mutableStateOf(false) }
     var switchDirection by remember { mutableStateOf(AssistantSwitchDirection.PICKER) }
+    var providerPickerTarget by remember { mutableStateOf<ModelPurpose?>(null) }
+    var providerPickerClosing by remember { mutableStateOf(false) }
+    var customModelTarget by remember { mutableStateOf<ModelPurpose?>(null) }
+    var customModelDialogTitle by remember { mutableStateOf<String?>(null) }
+    var customModelDialogClosing by remember { mutableStateOf(false) }
+    var modelPickerClosing by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -153,18 +167,18 @@ internal fun CropOverlaySheet(
                             onClose()
                         }
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(routeText, style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            modelProviderText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    ModeModelRow(
+                        route = uiState.settings.processingRoute,
+                        ocrModel = ocrModel,
+                        ocrProviderName = ocrProvider?.name,
+                        llmModel = llmModel,
+                        llmProviderName = llmProvider?.name,
+                        onToggleProcessingRoute = onToggleProcessingRoute,
+                        onPickModel = { purpose ->
+                            providerPickerClosing = false
+                            providerPickerTarget = purpose
+                        }
+                    )
                     uiState.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     Box(
                         modifier = Modifier
@@ -270,6 +284,94 @@ internal fun CropOverlaySheet(
                 switchDirection = AssistantSwitchDirection.PICKER
                 onSelectAssistant(assistantId)
                 assistantPickerClosing = true
+            }
+        )
+    }
+
+    val providerPickerTitle = when (providerPickerTarget) {
+        ModelPurpose.OCR -> "选择OCR提供方"
+        ModelPurpose.TEXT -> "选择LLM提供方"
+        ModelPurpose.VISION -> "选择多模态提供方"
+        null -> null
+    }
+    providerPickerTitle?.let { title ->
+        ProviderPickerOverlay(
+            providers = uiState.settings.providers,
+            closing = providerPickerClosing,
+            title = title,
+            onDismiss = { providerPickerClosing = true },
+            onDismissFinished = {
+                providerPickerTarget = null
+                providerPickerClosing = false
+            },
+            onPick = { provider ->
+                onUpdateModelSelection(
+                    providerPickerTarget ?: return@ProviderPickerOverlay,
+                    ModelSelection(providerId = provider.id, model = "")
+                )
+                onModelPickerTargetChange(providerPickerTarget)
+                providerPickerClosing = true
+            }
+        )
+    }
+
+    val pickerTarget = modelPickerTarget
+    val pickerProvider = pickerTarget?.let { uiState.settings.resolveModelProvider(it) }
+    if (pickerTarget != null && pickerProvider != null) {
+        val title = when (pickerTarget) {
+            ModelPurpose.TEXT -> "选择LLM模型"
+            ModelPurpose.VISION -> "选择多模态模型"
+            ModelPurpose.OCR -> "选择OCR模型"
+        }
+        ModelPickerOverlay(
+            provider = pickerProvider,
+            closing = modelPickerClosing,
+            title = title,
+            onDismiss = {
+                modelPickerClosing = true
+            },
+            onDismissFinished = {
+                onModelPickerTargetChange(null)
+                modelPickerClosing = false
+            },
+            onPick = { model ->
+                onUpdateModelSelection(
+                    pickerTarget,
+                    ModelSelection(providerId = pickerProvider.id, model = model)
+                )
+                modelPickerClosing = true
+            },
+            onCustomModelRequest = { dialogTitle ->
+                customModelTarget = pickerTarget
+                customModelDialogTitle = dialogTitle
+                customModelDialogClosing = false
+            }
+        )
+    }
+
+    customModelDialogTitle?.let { title ->
+        CustomModelOverlay(
+            title = title,
+            closing = customModelDialogClosing,
+            initialValue = customModelTarget?.let(uiState.settings::resolveModelName).orEmpty(),
+            onDismiss = {
+                customModelDialogClosing = true
+            },
+            onDismissFinished = {
+                customModelDialogTitle = null
+                customModelTarget = null
+                customModelDialogClosing = false
+            },
+            onConfirm = { model ->
+                val purpose = customModelTarget
+                val providerId = purpose?.let { uiState.settings.resolveModelProvider(it)?.id }
+                if (purpose != null && providerId != null) {
+                    onUpdateModelSelection(
+                        purpose,
+                        ModelSelection(providerId = providerId, model = model)
+                    )
+                    customModelDialogClosing = true
+                }
             }
         )
     }
@@ -589,6 +691,7 @@ private fun AssistantPickerOverlay(
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier
                 .width(300.dp)
+                .heightIn(max = 460.dp)
                 .graphicsLayer {
                     alpha = cardAlpha
                     translationY = cardTranslationY * density
@@ -596,12 +699,17 @@ private fun AssistantPickerOverlay(
                 .clickable(enabled = false, onClick = { })
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("选择助手", style = MaterialTheme.typography.titleMedium)
                 LazyColumn(
-                    modifier = Modifier.height(320.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .heightIn(max = 320.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(assistants, key = { it.id }) { assistant ->
@@ -643,6 +751,155 @@ private fun AssistantPickerOverlay(
         }
     }
 }
+
+@Composable
+private fun ModeModelRow(
+    route: ProcessingRoute,
+    ocrModel: String,
+    ocrProviderName: String?,
+    llmModel: String,
+    llmProviderName: String?,
+    onToggleProcessingRoute: () -> Unit,
+    onPickModel: (ModelPurpose) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.animation.AnimatedContent(
+            targetState = route,
+            transitionSpec = {
+                (
+                    androidx.compose.animation.slideInVertically(
+                        animationSpec = androidx.compose.animation.core.tween(
+                            durationMillis = 240,
+                            easing = androidx.compose.animation.core.FastOutSlowInEasing
+                        )
+                    ) { it / 2 } + androidx.compose.animation.fadeIn(
+                        animationSpec = androidx.compose.animation.core.tween(180)
+                    )
+                ).togetherWith(
+                    androidx.compose.animation.slideOutVertically(
+                        animationSpec = androidx.compose.animation.core.tween(
+                            durationMillis = 240,
+                            easing = androidx.compose.animation.core.FastOutSlowInEasing
+                        )
+                    ) { -it / 2 } + androidx.compose.animation.fadeOut(
+                        animationSpec = androidx.compose.animation.core.tween(180)
+                    )
+                )
+            },
+            label = "modeModelRow"
+        ) { currentRoute ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (currentRoute == ProcessingRoute.OCR_THEN_LLM) "OCR模式" else "多模态模式",
+                    modifier = Modifier.clickable(onClick = onToggleProcessingRoute),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1
+                )
+                if (currentRoute == ProcessingRoute.OCR_THEN_LLM) {
+                    ModelConfigCarousel(
+                        items = listOf(
+                            ModelConfigItem(
+                                label = "OCR",
+                                model = ocrModel,
+                                providerName = ocrProviderName,
+                                purpose = ModelPurpose.OCR
+                            ),
+                            ModelConfigItem(
+                                label = "LLM",
+                                model = llmModel,
+                                providerName = llmProviderName,
+                                purpose = ModelPurpose.TEXT
+                            )
+                        ),
+                        onClick = onPickModel
+                    )
+                } else {
+                    ModelConfigCarousel(
+                        items = listOf(
+                            ModelConfigItem(
+                                label = "LLM",
+                                model = llmModel,
+                                providerName = llmProviderName,
+                                purpose = ModelPurpose.VISION
+                            )
+                        ),
+                        onClick = onPickModel
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelConfigCarousel(
+    items: List<ModelConfigItem>,
+    onClick: (ModelPurpose) -> Unit
+) {
+    var index by remember(items) { mutableStateOf(0) }
+    LaunchedEffect(items) {
+        if (items.size <= 1) return@LaunchedEffect
+        while (true) {
+            delay(3_000)
+            index = (index + 1) % items.size
+        }
+    }
+    Box(
+        modifier = Modifier
+            .width(220.dp)
+            .height(20.dp),
+        contentAlignment = Alignment.CenterEnd
+    ) {
+        androidx.compose.animation.AnimatedContent(
+            targetState = items[index % items.size],
+            transitionSpec = {
+                (
+                    androidx.compose.animation.slideInVertically(
+                        animationSpec = androidx.compose.animation.core.tween(
+                            durationMillis = 240,
+                            easing = androidx.compose.animation.core.FastOutSlowInEasing
+                        )
+                    ) { it / 2 } + androidx.compose.animation.fadeIn(
+                        animationSpec = androidx.compose.animation.core.tween(180)
+                    )
+                ).togetherWith(
+                    androidx.compose.animation.slideOutVertically(
+                        animationSpec = androidx.compose.animation.core.tween(
+                            durationMillis = 240,
+                            easing = androidx.compose.animation.core.FastOutSlowInEasing
+                        )
+                    ) { -it / 2 } + androidx.compose.animation.fadeOut(
+                        animationSpec = androidx.compose.animation.core.tween(180)
+                    )
+                )
+            },
+            label = "modelConfigCarousel"
+        ) { item ->
+            ModelConfigText(
+                label = item.label,
+                model = item.model,
+                providerName = item.providerName,
+                onClick = { onClick(item.purpose) }
+            )
+        }
+    }
+}
+
+private data class ModelConfigItem(
+    val label: String,
+    val model: String,
+    val providerName: String?,
+    val purpose: ModelPurpose
+)
 
 @Composable
 private fun ResultCard(
@@ -701,6 +958,330 @@ private fun SmallHeaderAction(
         style = MaterialTheme.typography.labelMedium,
         color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     )
+}
+
+@Composable
+private fun ModelConfigText(
+    label: String,
+    model: String,
+    providerName: String?,
+    onClick: () -> Unit
+) {
+    val text = buildString {
+        append(label)
+        append("：")
+        append(model.ifBlank { "未配置模型" })
+        providerName?.takeIf { it.isNotBlank() }?.let {
+            append("（")
+            append(it)
+            append("）")
+        }
+    }
+    Text(
+        text = text,
+        modifier = Modifier.clickable(onClick = onClick),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        lineHeight = 20.sp
+    )
+}
+
+@Composable
+private fun ProviderPickerOverlay(
+    providers: List<ModelProviderConfig>,
+    closing: Boolean,
+    title: String,
+    onDismiss: () -> Unit,
+    onDismissFinished: () -> Unit,
+    onPick: (ModelProviderConfig) -> Unit
+) {
+    val density = LocalDensity.current.density
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        visible = true
+    }
+    LaunchedEffect(closing) {
+        if (closing) {
+            visible = false
+            delay(220)
+            onDismissFinished()
+        }
+    }
+    val overlayAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "providerPickerOverlayAlpha"
+    )
+    val cardAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 220, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "providerPickerCardAlpha"
+    )
+    val cardTranslationY by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (visible) 0f else if (closing) -20f else 20f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 220, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "providerPickerCardTranslationY"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.28f * overlayAlpha))
+            .clickable(onClick = {
+                if (!closing) onDismiss()
+            }),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .width(300.dp)
+                .heightIn(max = 520.dp)
+                .graphicsLayer {
+                    alpha = cardAlpha
+                    translationY = cardTranslationY * density
+                }
+                .clickable(enabled = false, onClick = { })
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .heightIn(max = 340.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(providers, key = { it.id }) { provider ->
+                        Surface(
+                            onClick = { onPick(provider) },
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(provider.name)
+                                Text(
+                                    provider.kind.displayName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        if (!closing) onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("关闭")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelPickerOverlay(
+    provider: ModelProviderConfig,
+    closing: Boolean,
+    title: String,
+    onDismiss: () -> Unit,
+    onDismissFinished: () -> Unit,
+    onPick: (String) -> Unit,
+    onCustomModelRequest: (String) -> Unit,
+    api: ProviderModelsApi = ProviderModelsApi()
+) {
+    val models by androidx.compose.runtime.produceState(initialValue = emptyList<RemoteModelOption>(), provider.id) {
+        value = runCatching { api.listModels(provider) }.getOrElse { emptyList() }
+    }
+    OverlaySelectionShell(
+        title = title,
+        closing = closing,
+        onDismiss = onDismiss,
+        onDismissFinished = onDismissFinished,
+        footer = {
+            OutlinedButton(
+                onClick = { onCustomModelRequest(title) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("使用自定义模型")
+            }
+        }
+    ) {
+        if (models.isEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(models, key = { it.id }) { model ->
+                    Surface(
+                        onClick = { onPick(model.id) },
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(model.displayName, style = MaterialTheme.typography.titleSmall)
+                            if (model.displayName != model.id) {
+                                Text(
+                                    model.id,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomModelOverlay(
+    title: String,
+    closing: Boolean,
+    initialValue: String,
+    onDismiss: () -> Unit,
+    onDismissFinished: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var value by remember(initialValue) { mutableStateOf(initialValue) }
+    val trimmedValue = value.trim()
+    OverlaySelectionShell(
+        title = title,
+        closing = closing,
+        onDismiss = onDismiss,
+        onDismissFinished = onDismissFinished,
+        footer = {
+            Button(
+                onClick = { onConfirm(trimmedValue) },
+                enabled = trimmedValue.isNotBlank(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("确认")
+            }
+        }
+    ) {
+        Text(
+            "输入要使用的模型名称，保存后将直接用于当前提供方。",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        OutlinedTextField(
+            value = value,
+            onValueChange = { value = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("自定义模型") },
+            placeholder = { Text("例如：gpt-4.1-mini") },
+            singleLine = true
+        )
+    }
+}
+
+@Composable
+private fun OverlaySelectionShell(
+    title: String,
+    closing: Boolean,
+    onDismiss: () -> Unit,
+    onDismissFinished: () -> Unit,
+    footer: @Composable (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val density = LocalDensity.current.density
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        visible = true
+    }
+    LaunchedEffect(closing) {
+        if (closing) {
+            visible = false
+            delay(220)
+            onDismissFinished()
+        }
+    }
+    val overlayAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "$title-overlayAlpha"
+    )
+    val cardAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 220, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "$title-cardAlpha"
+    )
+    val cardTranslationY by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (visible) 0f else if (closing) -20f else 20f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 220, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "$title-cardTranslationY"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.28f * overlayAlpha))
+            .clickable(onClick = {
+                if (!closing) onDismiss()
+            }),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .width(300.dp)
+                .heightIn(max = 460.dp)
+                .graphicsLayer {
+                    alpha = cardAlpha
+                    translationY = cardTranslationY * density
+                }
+                .clickable(enabled = false, onClick = { })
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                content()
+                footer?.invoke()
+                OutlinedButton(
+                    onClick = {
+                        if (!closing) onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("关闭")
+                }
+            }
+        }
+    }
 }
 
 @Composable

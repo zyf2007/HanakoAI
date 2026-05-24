@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -50,7 +48,6 @@ fun ModelPickerDialog(
         ) {
             Column(
                 modifier = Modifier
-                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -62,7 +59,9 @@ fun ModelPickerDialog(
                     }
                 } else {
                     LazyColumn(
-                        modifier = Modifier.heightIn(max = 360.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 360.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(models) { model ->

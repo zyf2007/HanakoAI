@@ -3,8 +3,10 @@ package `fun`.kirari.hanako.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -15,6 +17,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 @Composable
 fun CustomModelDialog(
@@ -26,15 +30,20 @@ fun CustomModelDialog(
     var value by remember(initialValue) { mutableStateOf(initialValue) }
     val trimmedValue = value.trim()
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(title)
-        },
-        text = {
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .heightIn(max = 420.dp)
+        ) {
             Column(
+                modifier = Modifier.padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                Text(title)
                 Text("输入要使用的模型名称，保存后将直接用于当前提供方。")
                 OutlinedTextField(
                     value = value,
@@ -44,20 +53,25 @@ fun CustomModelDialog(
                     placeholder = { Text("例如：gpt-4.1-mini") },
                     singleLine = true
                 )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(trimmedValue) },
-                enabled = trimmedValue.isNotBlank()
-            ) {
-                Text("确认")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { onConfirm(trimmedValue) },
+                        enabled = trimmedValue.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("确认")
+                    }
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("取消")
+                    }
+                }
             }
         }
-    )
+    }
 }

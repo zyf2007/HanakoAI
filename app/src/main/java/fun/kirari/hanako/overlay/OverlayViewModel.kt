@@ -10,6 +10,7 @@ import `fun`.kirari.hanako.capture.ProjectionSessionManager
 import `fun`.kirari.hanako.data.ModelPurpose
 import `fun`.kirari.hanako.data.ProcessingResult
 import `fun`.kirari.hanako.data.ProcessingRoute
+import `fun`.kirari.hanako.data.ModelSelection
 import `fun`.kirari.hanako.data.resolveModelName
 import `fun`.kirari.hanako.data.resolveModelProvider
 import `fun`.kirari.hanako.data.SettingsStore
@@ -220,6 +221,31 @@ internal class OverlayViewModel(
         val selectedIndex = assistants.indexOfFirst { it.id == current.selectedAssistantId }.takeIf { it >= 0 } ?: 0
         val nextIndex = if (selectedIndex == assistants.lastIndex) 0 else selectedIndex + 1
         selectAssistant(assistants[nextIndex].id)
+    }
+
+    fun updateModelSelection(purpose: ModelPurpose, selection: ModelSelection) {
+        viewModelScope.launch {
+            store.update { current ->
+                when (purpose) {
+                    ModelPurpose.TEXT -> current.copy(textModelSelection = selection)
+                    ModelPurpose.VISION -> current.copy(visionModelSelection = selection)
+                    ModelPurpose.OCR -> current.copy(ocrModelSelection = selection)
+                }
+            }
+        }
+    }
+
+    fun toggleProcessingRoute() {
+        viewModelScope.launch {
+            store.update { current ->
+                current.copy(
+                    processingRoute = when (current.processingRoute) {
+                        ProcessingRoute.OCR_THEN_LLM -> ProcessingRoute.MULTIMODAL_DIRECT
+                        ProcessingRoute.MULTIMODAL_DIRECT -> ProcessingRoute.OCR_THEN_LLM
+                    }
+                )
+            }
+        }
     }
 
     private fun buildModelSummary(model: String, providerName: String?): String {

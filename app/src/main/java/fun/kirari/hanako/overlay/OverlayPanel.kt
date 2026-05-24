@@ -13,6 +13,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import `fun`.kirari.hanako.data.ModelPurpose
 
 internal enum class AssistantSwitchDirection {
     PREVIOUS,
@@ -27,6 +31,7 @@ internal fun OverlayPanel(
     panelHeightPx: Int = 0
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var modelPickerTarget by remember { mutableStateOf<ModelPurpose?>(null) }
     LaunchedEffect(uiState.sheetMode, uiState.working, uiState.liveOcrText, uiState.liveAnswerText) {
         Log.d(
             "OverlayService",
@@ -40,9 +45,13 @@ internal fun OverlayPanel(
                 onClose = onDismiss,
                 onConfirm = viewModel::process,
                 panelHeightPx = panelHeightPx,
+                modelPickerTarget = modelPickerTarget,
+                onModelPickerTargetChange = { modelPickerTarget = it },
                 onSelectAssistant = viewModel::selectAssistant,
                 onSelectPreviousAssistant = viewModel::selectPreviousAssistant,
-                onSelectNextAssistant = viewModel::selectNextAssistant
+                onSelectNextAssistant = viewModel::selectNextAssistant,
+                onUpdateModelSelection = viewModel::updateModelSelection,
+                onToggleProcessingRoute = viewModel::toggleProcessingRoute
             )
         }
 
