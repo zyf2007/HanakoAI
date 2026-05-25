@@ -72,14 +72,15 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import `fun`.kirari.hanako.capture.MediaProjectionForegroundService
-import `fun`.kirari.hanako.capture.ProjectionPermissionActivity
-import `fun`.kirari.hanako.capture.ProjectionSessionManager
+import android.widget.Toast
+import `fun`.kirari.hanako.capture.ScreenCaptureManager
+import `fun`.kirari.hanako.capture.ScreenCaptureStartResult
 import `fun`.kirari.hanako.data.ModelPurpose
 import `fun`.kirari.hanako.data.ModelSelection
 import `fun`.kirari.hanako.data.ProcessingRoute
 import `fun`.kirari.hanako.data.displayName
 import `fun`.kirari.hanako.overlay.OverlayLaunchMode
+import `fun`.kirari.hanako.overlay.OverlayRuntimeState
 import `fun`.kirari.hanako.overlay.OverlayService
 import `fun`.kirari.hanako.ui.components.CustomModelDialog
 import `fun`.kirari.hanako.ui.components.HeroSection
@@ -100,6 +101,7 @@ private const val ROUTE_SETTINGS_MODEL = "settings_model"
 private const val ROUTE_SETTINGS_ASSISTANT = "settings_assistant"
 private const val ROUTE_SETTINGS_ASSISTANT_DETAIL = "settings_assistant_detail"
 private const val ROUTE_SETTINGS_AUTOMATION = "settings_automation"
+private const val ROUTE_SETTINGS_CAPTURE_METHOD = "settings_capture_method"
 private const val ROUTE_SETTINGS_DEBUG_LOGS = "settings_debug_logs"
 private const val ARG_PROVIDER_ID = "providerId"
 private const val ARG_ASSISTANT_ID = "assistantId"
@@ -117,6 +119,7 @@ private fun appTitle(route: String?, currentScreen: Screen): String = when (rout
     ROUTE_SETTINGS_MODEL -> "模型设置"
     ROUTE_SETTINGS_ASSISTANT -> "助手配置"
     ROUTE_SETTINGS_AUTOMATION -> "自动模式"
+    ROUTE_SETTINGS_CAPTURE_METHOD -> "屏幕录制方式"
     ROUTE_SETTINGS_DEBUG_LOGS -> "调试日志"
     null -> currentScreen.title
     else -> when {
@@ -132,7 +135,7 @@ private fun appTitle(route: String?, currentScreen: Screen): String = when (rout
 fun HanakoApp(viewModel: MainViewModel) {
     val settings by viewModel.settings.collectAsState()
     val context = LocalContext.current
-    val overlayEnabled by ProjectionSessionManager.sessionActive.collectAsState()
+    val overlayEnabled by OverlayRuntimeState.running.collectAsState()
     var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     var providerModelsPreviewId by remember { mutableStateOf<String?>(null) }
@@ -255,21 +258,24 @@ fun HanakoApp(viewModel: MainViewModel) {
                                 },
                                 onToggleOverlay = { enabled ->
                                     if (enabled) {
-                                        context.startActivity(
-                                            Intent(context, ProjectionPermissionActivity::class.java).apply {
-                                                putExtra(
-                                                    ProjectionPermissionActivity.EXTRA_LAUNCH_MODE,
-                                                    OverlayLaunchMode.NORMAL.name
-                                                )
+                                        when (
+                                            val result = ScreenCaptureManager.requestStart(
+                                                context = context,
+                                                method = settings.screenCaptureMethod,
+                                                launchMode = OverlayLaunchMode.NORMAL
+                                            )
+                                        ) {
+                                            ScreenCaptureStartResult.Started -> Unit
+                                            is ScreenCaptureStartResult.UserActionRequired -> {
+                                                Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
                                             }
-                                        )
+                                            is ScreenCaptureStartResult.Failed -> {
+                                                Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
                                     } else {
                                         context.stopService(Intent(context, OverlayService::class.java))
-                                        context.stopService(
-                                            Intent(context, MediaProjectionForegroundService::class.java).apply {
-                                                action = MediaProjectionForegroundService.ACTION_STOP
-                                            }
-                                        )
+                                        ScreenCaptureManager.stop(context, settings.screenCaptureMethod)
                                     }
                                 },
                                 onSelectRoute = viewModel::setRoute,
@@ -282,6 +288,7 @@ fun HanakoApp(viewModel: MainViewModel) {
                                 onNavigateModel = { navController.navigate(ROUTE_SETTINGS_MODEL) },
                                 onNavigateAssistant = { navController.navigate(ROUTE_SETTINGS_ASSISTANT) },
                                 onNavigateAutomation = { navController.navigate(ROUTE_SETTINGS_AUTOMATION) },
+                                onNavigateCaptureMethod = { navController.navigate(ROUTE_SETTINGS_CAPTURE_METHOD) },
                                 onNavigateDebugLogs = { navController.navigate(ROUTE_SETTINGS_DEBUG_LOGS) }
                             )
                         }
@@ -359,6 +366,12 @@ fun HanakoApp(viewModel: MainViewModel) {
                                 it.copy(completionNotificationEnabled = enabled)
                             }
                         }
+                    )
+                }
+                composable(ROUTE_SETTINGS_CAPTURE_METHOD) {
+                    ScreenCaptureMethodSettingsScreen(
+                        selectedMethod = settings.screenCaptureMethod,
+                        onSelectMethod = viewModel::setScreenCaptureMethod
                     )
                 }
                 composable(ROUTE_SETTINGS_DEBUG_LOGS) {
@@ -504,20 +517,28 @@ private fun HanakoHomeScreen(
             HeroSection(
                 overlayEnabled = overlayEnabled,
                 hasOverlayPermission = hasOverlayPermission,
+                captureMethod = settings.screenCaptureMethod,
                 route = settings.processingRoute,
                 onSelectRoute = onSelectRoute,
                 onOpenOverlayPermission = onOpenOverlayPermission,
                 onToggleOverlay = onToggleOverlay,
                 onStartAutoMode = {
                     if (!hasOverlayPermission) return@HeroSection
-                    context.startActivity(
-                        Intent(context, ProjectionPermissionActivity::class.java).apply {
-                            putExtra(
-                                ProjectionPermissionActivity.EXTRA_LAUNCH_MODE,
-                                OverlayLaunchMode.AUTO.name
-                            )
+                    when (
+                        val result = ScreenCaptureManager.requestStart(
+                            context = context,
+                            method = settings.screenCaptureMethod,
+                            launchMode = OverlayLaunchMode.AUTO
+                        )
+                    ) {
+                        ScreenCaptureStartResult.Started -> Unit
+                        is ScreenCaptureStartResult.UserActionRequired -> {
+                            Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
                         }
-                    )
+                        is ScreenCaptureStartResult.Failed -> {
+                            Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             )
         }

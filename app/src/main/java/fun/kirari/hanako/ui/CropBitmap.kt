@@ -11,6 +11,7 @@ fun cropBitmap(
     canvasSize: IntSize
 ): Bitmap {
     if (canvasSize.width == 0 || canvasSize.height == 0) return source
+    if (start == end) return source
     val canvasWidth = canvasSize.width.toFloat()
     val canvasHeight = canvasSize.height.toFloat()
     val scale = minOf(canvasWidth / source.width.toFloat(), canvasHeight / source.height.toFloat())

@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.data.AssistantPreset
 import `fun`.kirari.hanako.data.previewPrompt
 import `fun`.kirari.hanako.data.ProcessingRoute
+import `fun`.kirari.hanako.data.ScreenCaptureMethod
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -64,6 +65,7 @@ import kotlinx.coroutines.delay
 fun HeroSection(
     overlayEnabled: Boolean,
     hasOverlayPermission: Boolean,
+    captureMethod: ScreenCaptureMethod,
     route: ProcessingRoute,
     onSelectRoute: (ProcessingRoute) -> Unit,
     onOpenOverlayPermission: () -> Unit,
@@ -277,9 +279,18 @@ fun HeroSection(
                     }
                 }
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !overlayEnabled) {
+                if (captureMethod == ScreenCaptureMethod.MEDIA_PROJECTION &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+                    !overlayEnabled
+                ) {
                     Text(
                         "提示：点击启动进入普通模式，长按启动进入自动模式；Android 14+ 首次会弹出截屏授权。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
+                    )
+                } else if (captureMethod == ScreenCaptureMethod.SHIZUKU_ADB && !overlayEnabled) {
+                    Text(
+                        "提示：当前使用 Shizuku 路线。启动时会先申请 Shizuku 授权，后续截图走 shell screencap。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
                     )

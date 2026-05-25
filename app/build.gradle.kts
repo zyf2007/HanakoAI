@@ -67,6 +67,7 @@ android {
     }
     buildFeatures {
         compose = true
+        aidl = true
     }
 
     packaging {
@@ -103,6 +104,8 @@ dependencies {
     implementation(libs.jlatexmath)
     implementation(libs.jlatexmath.font.greek)
     implementation(libs.jlatexmath.font.cyrillic)
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

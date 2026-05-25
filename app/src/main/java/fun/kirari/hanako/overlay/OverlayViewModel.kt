@@ -6,7 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import `fun`.kirari.hanako.automation.BubbleDisplayState
-import `fun`.kirari.hanako.capture.ProjectionSessionManager
+import `fun`.kirari.hanako.capture.ScreenCaptureManager
 import `fun`.kirari.hanako.data.AutomationActionType
 import `fun`.kirari.hanako.data.ModelPurpose
 import `fun`.kirari.hanako.data.ProcessingResult
@@ -66,7 +66,9 @@ internal class OverlayViewModel(
         }
         viewModelScope.launch {
             runCatching {
-                withContext(Dispatchers.IO) { ProjectionSessionManager.captureLatestBitmap() }
+                withContext(Dispatchers.IO) {
+                    ScreenCaptureManager.captureLatestBitmap(appContext, _uiState.value.settings.screenCaptureMethod)
+                }
             }.onSuccess { bitmap ->
                 AppDebugLogStore.i(tag, "openCropSheet capture success width=${bitmap.width} height=${bitmap.height}")
                 _uiState.update {
@@ -117,7 +119,9 @@ internal class OverlayViewModel(
                 )
             }
             runCatching {
-                withContext(Dispatchers.IO) { ProjectionSessionManager.captureLatestBitmap() }
+                withContext(Dispatchers.IO) {
+                    ScreenCaptureManager.captureLatestBitmap(appContext, _uiState.value.settings.screenCaptureMethod)
+                }
             }.onSuccess { bitmap ->
                 AppDebugLogStore.i(tag, "processFullScreen capture success width=${bitmap.width} height=${bitmap.height}")
                 processAutoBitmap(bitmap)

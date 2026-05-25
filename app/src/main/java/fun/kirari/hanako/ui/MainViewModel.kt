@@ -11,6 +11,7 @@ import `fun`.kirari.hanako.data.ModelProviderConfig
 import `fun`.kirari.hanako.data.ModelSelection
 import `fun`.kirari.hanako.data.ProcessingResult
 import `fun`.kirari.hanako.data.ProcessingRoute
+import `fun`.kirari.hanako.data.ScreenCaptureMethod
 import `fun`.kirari.hanako.data.SettingsStore
 import `fun`.kirari.hanako.data.defaultAssistant
 import `fun`.kirari.hanako.data.defaultProvider
@@ -140,6 +141,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setRoute(route: ProcessingRoute) {
         viewModelScope.launch {
             store.update { it.copy(processingRoute = route) }
+        }
+    }
+
+    fun setScreenCaptureMethod(method: ScreenCaptureMethod) {
+        viewModelScope.launch {
+            store.update { it.copy(screenCaptureMethod = method) }
         }
     }
 

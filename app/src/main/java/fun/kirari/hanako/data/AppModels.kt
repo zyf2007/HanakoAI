@@ -89,6 +89,12 @@ enum class ProcessingRoute {
 }
 
 @Serializable
+enum class ScreenCaptureMethod {
+    MEDIA_PROJECTION,
+    SHIZUKU_ADB
+}
+
+@Serializable
 data class AutomationSettings(
     val completionNotificationEnabled: Boolean = true
 )
@@ -100,6 +106,7 @@ data class AppSettings(
     val assistants: List<AssistantPreset> = defaultAssistants(),
     val selectedAssistantId: String? = assistants.firstOrNull()?.id,
     val processingRoute: ProcessingRoute = ProcessingRoute.OCR_THEN_LLM,
+    val screenCaptureMethod: ScreenCaptureMethod = ScreenCaptureMethod.MEDIA_PROJECTION,
     val automation: AutomationSettings = AutomationSettings(),
     val textModelSelection: ModelSelection = ModelSelection(),
     val visionModelSelection: ModelSelection = ModelSelection(),
@@ -166,6 +173,18 @@ val ModelPurpose.displayName: String
         ModelPurpose.OCR -> "OCR"
         ModelPurpose.TEXT -> "文本"
         ModelPurpose.VISION -> "多模态"
+    }
+
+val ScreenCaptureMethod.displayName: String
+    get() = when (this) {
+        ScreenCaptureMethod.MEDIA_PROJECTION -> "系统屏幕录制"
+        ScreenCaptureMethod.SHIZUKU_ADB -> "Shizuku + adb 截屏"
+    }
+
+val ScreenCaptureMethod.description: String
+    get() = when (this) {
+        ScreenCaptureMethod.MEDIA_PROJECTION -> "通过系统屏幕录制权限建立截图会话，兼容当前悬浮球流程。"
+        ScreenCaptureMethod.SHIZUKU_ADB -> "通过 Shizuku 授权后调用 adb 截屏，避免每次启动都请求屏幕录制。"
     }
 
 fun AppSettings.modelSelectionFor(purpose: ModelPurpose): ModelSelection = when (purpose) {

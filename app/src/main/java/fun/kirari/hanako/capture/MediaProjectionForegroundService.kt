@@ -99,6 +99,7 @@ class MediaProjectionForegroundService : Service() {
 object ProjectionSessionManager {
     private val _sessionActive = MutableStateFlow(false)
     val sessionActive: StateFlow<Boolean> = _sessionActive
+    val inactiveSessionFlow: StateFlow<Boolean> = MutableStateFlow(false)
 
     @Volatile
     private var mediaProjection: MediaProjection? = null

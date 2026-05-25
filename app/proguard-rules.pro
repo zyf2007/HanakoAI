@@ -27,3 +27,12 @@
 
 # Preserve Android Log calls in release builds for remote troubleshooting.
 -keep class android.util.Log { *; }
+
+# Shizuku user service is instantiated out-of-process and must keep stable names.
+-keep class fun.kirari.hanako.capture.ShizukuShellService {
+    public <init>();
+    public *;
+}
+-keep class fun.kirari.hanako.capture.IShizukuShellService { *; }
+-keep class fun.kirari.hanako.capture.IShizukuShellService$Stub { *; }
+-keep class fun.kirari.hanako.capture.IShizukuShellService$Stub$Proxy { *; }

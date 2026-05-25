@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -49,6 +50,8 @@ import `fun`.kirari.hanako.data.previewPrompt
 import `fun`.kirari.hanako.data.AutomationSettings
 import `fun`.kirari.hanako.data.ModelProviderConfig
 import `fun`.kirari.hanako.data.ModelPurpose
+import `fun`.kirari.hanako.data.ScreenCaptureMethod
+import `fun`.kirari.hanako.data.description
 import `fun`.kirari.hanako.data.displayName
 import `fun`.kirari.hanako.data.resolveModelName
 import `fun`.kirari.hanako.data.resolveModelProvider
@@ -63,6 +66,7 @@ fun SettingsMenuScreen(
     onNavigateModel: () -> Unit,
     onNavigateAssistant: () -> Unit,
     onNavigateAutomation: () -> Unit,
+    onNavigateCaptureMethod: () -> Unit,
     onNavigateDebugLogs: () -> Unit
 ) {
     LazyColumn(
@@ -102,6 +106,74 @@ fun SettingsMenuScreen(
                 onClick = onNavigateAutomation
             )
         }
+        item {
+            SettingsEntryCard(
+                title = "屏幕录制方式",
+                subtitle = "管理当前激活的截图实现",
+                icon = Icons.Default.PhoneAndroid,
+                onClick = onNavigateCaptureMethod
+            )
+        }
+    }
+}
+
+@Composable
+fun ScreenCaptureMethodSettingsScreen(
+    selectedMethod: ScreenCaptureMethod,
+    onSelectMethod: (ScreenCaptureMethod) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            SectionCard(title = "屏幕录制方式") {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ScreenCaptureMethod.entries.forEach { method ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelectMethod(method) },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (selectedMethod == method) {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerLow
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = method.displayName,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = method.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = selectedMethod == method,
+                                    onCheckedChange = { checked ->
+                                        if (checked) onSelectMethod(method)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item { Spacer(modifier = Modifier.height(80.dp)) }
     }
 }
 

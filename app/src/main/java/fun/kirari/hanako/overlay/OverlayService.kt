@@ -115,6 +115,7 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                 this,
                 OverlayViewModel.factory(applicationContext)
             )[OverlayViewModel::class.java]
+            OverlayRuntimeState.setRunning(true)
             createNotificationChannel()
             startForeground(NOTIFICATION_ID, buildNotification())
             showBubble()
@@ -159,6 +160,7 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         bubbleSpinnerView = null
         bubbleRotateAnimator?.cancel()
         bubbleRotateAnimator = null
+        OverlayRuntimeState.setRunning(false)
         serviceViewModelStore.clear()
         serviceScope.cancel()
         super.onDestroy()

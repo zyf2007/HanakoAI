@@ -19,6 +19,7 @@ okhttpSse = "4.12.0"
 coil = "2.7.0"
 markdown = "0.7.3"
 jlatexmath = "0.2.0"
+shizuku = "13.1.5"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -53,6 +54,8 @@ jetbrains-markdown = { module = "org.jetbrains:markdown", version.ref = "markdow
 jlatexmath = { module = "ru.noties:jlatexmath-android", version.ref = "jlatexmath" }
 jlatexmath-font-greek = { module = "ru.noties:jlatexmath-android-font-greek", version.ref = "jlatexmath" }
 jlatexmath-font-cyrillic = { module = "ru.noties:jlatexmath-android-font-cyrillic", version.ref = "jlatexmath" }
+shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
+shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

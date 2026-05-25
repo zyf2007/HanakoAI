@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -60,12 +61,15 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import `fun`.kirari.hanako.R
 import `fun`.kirari.hanako.data.AssistantPreset
 import `fun`.kirari.hanako.data.previewPrompt
 import `fun`.kirari.hanako.data.ModelProviderConfig
@@ -99,6 +103,7 @@ internal fun CropOverlaySheet(
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var cropStart by remember { mutableStateOf(Offset.Zero) }
     var cropEnd by remember { mutableStateOf(Offset.Zero) }
+    var cropPromptVisible by remember { mutableStateOf(true) }
     val density = LocalDensity.current
     val selectedAssistant = uiState.settings.assistants.firstOrNull { it.id == uiState.settings.selectedAssistantId }
     val routeText = if (uiState.settings.processingRoute == ProcessingRoute.OCR_THEN_LLM) "OCR模式" else "多模态模式"
@@ -108,6 +113,7 @@ internal fun CropOverlaySheet(
     val llmProvider = uiState.settings.resolveModelProvider(llmPurpose)
     val llmModel = uiState.settings.resolveModelName(llmPurpose)
     val selectionColor = MaterialTheme.colorScheme.primary
+    val hasSelection = cropStart != cropEnd
     val panelMaxHeight = with(density) { panelHeightPx.toDp() }
     var showAssistantDialog by remember { mutableStateOf(false) }
     var assistantPickerClosing by remember { mutableStateOf(false) }
@@ -186,13 +192,7 @@ internal fun CropOverlaySheet(
                             .weight(1f)
                             .clip(RoundedCornerShape(24.dp))
                             .background(Color.Black)
-                            .onSizeChanged { size ->
-                                canvasSize = size
-                                if (cropEnd == Offset.Zero) {
-                                    cropStart = Offset(size.width * 0.12f, size.height * 0.12f)
-                                    cropEnd = Offset(size.width * 0.88f, size.height * 0.88f)
-                                }
-                            }
+                            .onSizeChanged { size -> canvasSize = size }
                     ) {
                         if (bitmap != null) {
                             Image(
@@ -201,12 +201,38 @@ internal fun CropOverlaySheet(
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Fit
                             )
+                            if (cropPromptVisible) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = 0.36f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_bubble_crop),
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(52.dp)
+                                        )
+                                        Text(
+                                            text = "滑动截取屏幕区域",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                    }
+                                }
+                            }
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .pointerInput(canvasSize) {
                                         detectDragGestures(
                                             onDragStart = {
+                                                cropPromptVisible = false
                                                 cropStart = it
                                                 cropEnd = it
                                             },
@@ -217,32 +243,34 @@ internal fun CropOverlaySheet(
                                         )
                                     }
                             ) {
-                                val topLeft = Offset(minOf(cropStart.x, cropEnd.x), minOf(cropStart.y, cropEnd.y))
-                                val size = Size(
-                                    width = abs(cropEnd.x - cropStart.x),
-                                    height = abs(cropEnd.y - cropStart.y)
-                                )
-                                val right = topLeft.x + size.width
-                                val bottom = topLeft.y + size.height
-                                val overlayColor = Color.Black.copy(alpha = 0.42f)
-                                drawRect(overlayColor, topLeft = Offset.Zero, size = Size(this.size.width, topLeft.y.coerceAtLeast(0f)))
-                                drawRect(overlayColor, topLeft = Offset.Zero, size = Size(topLeft.x.coerceAtLeast(0f), this.size.height))
-                                drawRect(
-                                    overlayColor,
-                                    topLeft = Offset(right.coerceAtMost(this.size.width), 0f),
-                                    size = Size((this.size.width - right).coerceAtLeast(0f), this.size.height)
-                                )
-                                drawRect(
-                                    overlayColor,
-                                    topLeft = Offset(0f, bottom.coerceAtMost(this.size.height)),
-                                    size = Size(this.size.width, (this.size.height - bottom).coerceAtLeast(0f))
-                                )
-                                drawRect(
-                                    color = selectionColor,
-                                    topLeft = topLeft,
-                                    size = size,
-                                    style = Stroke(width = 4f)
-                                )
+                                if (hasSelection) {
+                                    val topLeft = Offset(minOf(cropStart.x, cropEnd.x), minOf(cropStart.y, cropEnd.y))
+                                    val size = Size(
+                                        width = abs(cropEnd.x - cropStart.x),
+                                        height = abs(cropEnd.y - cropStart.y)
+                                    )
+                                    val right = topLeft.x + size.width
+                                    val bottom = topLeft.y + size.height
+                                    val overlayColor = Color.Black.copy(alpha = 0.42f)
+                                    drawRect(overlayColor, topLeft = Offset.Zero, size = Size(this.size.width, topLeft.y.coerceAtLeast(0f)))
+                                    drawRect(overlayColor, topLeft = Offset.Zero, size = Size(topLeft.x.coerceAtLeast(0f), this.size.height))
+                                    drawRect(
+                                        overlayColor,
+                                        topLeft = Offset(right.coerceAtMost(this.size.width), 0f),
+                                        size = Size((this.size.width - right).coerceAtLeast(0f), this.size.height)
+                                    )
+                                    drawRect(
+                                        overlayColor,
+                                        topLeft = Offset(0f, bottom.coerceAtMost(this.size.height)),
+                                        size = Size(this.size.width, (this.size.height - bottom).coerceAtLeast(0f))
+                                    )
+                                    drawRect(
+                                        color = selectionColor,
+                                        topLeft = topLeft,
+                                        size = size,
+                                        style = Stroke(width = 4f)
+                                    )
+                                }
                             }
                         }
                     }
@@ -257,7 +285,7 @@ internal fun CropOverlaySheet(
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = bitmap != null
+                            enabled = bitmap != null && hasSelection
                         ) {
                             Text("确认处理")
                         }
@@ -833,7 +861,7 @@ private fun ModelConfigCarousel(
         modifier = Modifier
             .width(220.dp)
             .height(20.dp),
-        contentAlignment = Alignment.CenterEnd
+        contentAlignment = Alignment.CenterStart
     ) {
         androidx.compose.animation.AnimatedContent(
             targetState = items[index % items.size],
@@ -860,12 +888,17 @@ private fun ModelConfigCarousel(
             },
             label = "modelConfigCarousel"
         ) { item ->
-            ModelConfigText(
-                label = item.label,
-                model = item.model,
-                providerName = item.providerName,
-                onClick = { onClick(item.purpose) }
-            )
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                ModelConfigText(
+                    label = item.label,
+                    model = item.model,
+                    providerName = item.providerName,
+                    onClick = { onClick(item.purpose) }
+                )
+            }
         }
     }
 }
@@ -955,10 +988,13 @@ private fun ModelConfigText(
     }
     Text(
         text = text,
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
+        textAlign = TextAlign.End,
         overflow = TextOverflow.Ellipsis,
         lineHeight = 20.sp
     )
