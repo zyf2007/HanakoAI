@@ -30,6 +30,18 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    flavorDimensions += "edition"
+    productFlavors {
+        create("full") {
+            dimension = "edition"
+            buildConfigField("boolean", "HAS_MLKIT", "true")
+        }
+        create("lite") {
+            dimension = "edition"
+            buildConfigField("boolean", "HAS_MLKIT", "false")
+        }
+    }
+
     androidResources {
         localeFilters += "zh"
     }
@@ -78,6 +90,7 @@ android {
     buildFeatures {
         compose = true
         aidl = true
+        buildConfig = true
     }
 
     packaging {
@@ -116,7 +129,7 @@ dependencies {
     implementation(libs.jlatexmath.font.cyrillic)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
-    implementation(libs.mlkit.text.recognition.chinese)
+    "fullImplementation"(libs.mlkit.text.recognition.chinese)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

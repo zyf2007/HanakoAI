@@ -78,6 +78,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import android.widget.Toast
+import `fun`.kirari.hanako.BuildConfig
 import `fun`.kirari.hanako.capture.ScreenCaptureManager
 import `fun`.kirari.hanako.capture.ScreenCaptureStartResult
 import `fun`.kirari.hanako.copyToClipboardWithToast
@@ -154,6 +155,7 @@ fun HanakoApp(viewModel: MainViewModel) {
     var providerPickerTarget by remember { mutableStateOf<ModelPurpose?>(null) }
     var modelPickerProviderId by remember { mutableStateOf<String?>(null) }
     var showLocalOcrDialog by remember { mutableStateOf(false) }
+    var showLiteDownloadDialog by remember { mutableStateOf(false) }
 
     var currentScreen by rememberSaveable { mutableStateOf(Screen.Hanako) }
     val navController = rememberNavController()
@@ -409,7 +411,9 @@ fun HanakoApp(viewModel: MainViewModel) {
             onPick = { providerId ->
                 if (providerId == LOCAL_OCR_PROVIDER_ID) {
                     providerPickerTarget = null
-                    if (settings.localOcr.installed) {
+                    if (!BuildConfig.HAS_MLKIT) {
+                        showLiteDownloadDialog = true
+                    } else if (settings.localOcr.installed) {
                         viewModel.updateModelSelection(
                             ModelPurpose.OCR,
                             ModelSelection(providerId = LOCAL_OCR_PROVIDER_ID, model = LOCAL_OCR_MODEL_ID)
@@ -582,6 +586,36 @@ fun HanakoApp(viewModel: MainViewModel) {
                     TextButton(onClick = { showLocalOcrDialog = false }) {
                         Text("取消")
                     }
+                }
+            }
+        )
+    }
+
+    if (showLiteDownloadDialog) {
+        AlertDialog(
+            onDismissRequest = { showLiteDownloadDialog = false },
+            title = { Text("本地ML Kit不可用") },
+            text = {
+                Text("当前 Lite 版本不包含本地 ML Kit OCR 功能，建议使用 OCR 大模型 API。如需使用此功能，请下载包含 ML Kit 的 Full 版本。")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLiteDownloadDialog = false
+                        context.startActivity(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://github.com/zyf2007/HanakoAI")
+                            )
+                        )
+                    }
+                ) {
+                    Text("前往下载")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLiteDownloadDialog = false }) {
+                    Text("取消")
                 }
             }
         )
