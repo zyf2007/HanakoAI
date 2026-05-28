@@ -10,7 +10,6 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import okhttp3.OkHttpClient
 import okhttp3.Request
 
 data class RemoteModelOption(
@@ -19,17 +18,20 @@ data class RemoteModelOption(
 )
 
 class ProviderModelsApi(
-    private val client: OkHttpClient = OkHttpClient(),
+    private val clientProvider: NetworkClientProvider = NetworkClientProvider(),
     private val json: Json = Json { ignoreUnknownKeys = true }
 ) {
-    suspend fun listModels(provider: ModelProviderConfig): List<RemoteModelOption> = withContext(Dispatchers.IO) {
+    suspend fun listModels(
+        provider: ModelProviderConfig,
+        trustAllHttpsCertificates: Boolean = false
+    ): List<RemoteModelOption> = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(provider.modelsRequestUrl())
             .addHeader("Authorization", "Bearer ${provider.apiKey}")
             .get()
             .build()
 
-        client.newCall(request).execute().use { response ->
+        clientProvider.client(trustAllHttpsCertificates).newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 error("Failed to get models: ${response.code} ${response.body?.string()}")
             }

@@ -5,20 +5,12 @@ import `fun`.kirari.hanako.data.ProviderKind
 import `fun`.kirari.hanako.debug.AppDebugLogStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.Json
-import okhttp3.OkHttpClient
 
 internal class UnifiedLLMClient(
-    client: OkHttpClient,
-    json: Json = Json { ignoreUnknownKeys = true }
+    private val clientProvider: NetworkClientProvider = NetworkClientProvider(),
+    private val json: Json = Json { ignoreUnknownKeys = true }
 ) {
     private val tag = "HanakoUnifiedLLM"
-    private val sseClient = SseStreamClient(client)
-    private val adapters = mapOf<ProviderKind, ProviderAdapter>(
-        ProviderKind.OPENAI_COMPATIBLE to OpenAiChatAdapter(sseClient, json),
-        ProviderKind.OPENAI_RESPONSES to OpenAiResponsesAdapter(sseClient, json),
-        ProviderKind.ANTHROPIC to AnthropicAdapter(sseClient, json),
-        ProviderKind.GOOGLE to GoogleAdapter(sseClient, json)
-    )
 
     suspend fun stream(
         provider: ModelProviderConfig,
@@ -27,11 +19,17 @@ internal class UnifiedLLMClient(
         userPrompt: String,
         imagesBase64: List<String> = emptyList(),
         tools: List<ToolDef>? = null,
-        firstDeltaTimeoutMillis: Long
+        firstDeltaTimeoutMillis: Long,
+        trustAllHttpsCertificates: Boolean = false
     ): Flow<LlmEvent> {
-        AppDebugLogStore.i(tag, "stream provider=${provider.kind} model=$model imageCount=${imagesBase64.size} hasTools=${tools != null}")
-        val adapter = adapters[provider.kind]
-            ?: error("不支持的 provider: ${provider.kind}")
+        AppDebugLogStore.i(tag, "stream provider=${provider.kind} model=$model imageCount=${imagesBase64.size} hasTools=${tools != null} trustAllHttps=$trustAllHttpsCertificates")
+        val sseClient = SseStreamClient(clientProvider.client(trustAllHttpsCertificates))
+        val adapter = when (provider.kind) {
+            ProviderKind.OPENAI_COMPATIBLE -> OpenAiChatAdapter(sseClient, json)
+            ProviderKind.OPENAI_RESPONSES -> OpenAiResponsesAdapter(sseClient, json)
+            ProviderKind.ANTHROPIC -> AnthropicAdapter(sseClient, json)
+            ProviderKind.GOOGLE -> GoogleAdapter(sseClient, json)
+        }
         return adapter.stream(
             StreamRequest(
                 provider = provider,

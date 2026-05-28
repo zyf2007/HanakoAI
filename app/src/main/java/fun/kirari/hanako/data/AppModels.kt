@@ -122,6 +122,7 @@ data class AppSettings(
     val processingRoute: ProcessingRoute = ProcessingRoute.OCR_THEN_LLM,
     val screenCaptureMethod: ScreenCaptureMethod = ScreenCaptureMethod.MEDIA_PROJECTION,
     val automation: AutomationSettings = AutomationSettings(),
+    val trustAllHttpsCertificates: Boolean = false,
     val textModelSelection: ModelSelection = ModelSelection(),
     val visionModelSelection: ModelSelection = ModelSelection(),
     val ocrModelSelection: ModelSelection = ModelSelection(),

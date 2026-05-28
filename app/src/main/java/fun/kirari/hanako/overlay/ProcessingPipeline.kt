@@ -44,7 +44,8 @@ internal class ProcessingPipeline(
         val visionModel: String,
         val firstDeltaTimeoutMillis: Long,
         val route: ProcessingRoute,
-        val usingLocalOcr: Boolean
+        val usingLocalOcr: Boolean,
+        val trustAllHttpsCertificates: Boolean
     )
 
     fun resolveModels(state: OverlayUiState): ResolvedModels {
@@ -60,7 +61,8 @@ internal class ProcessingPipeline(
             visionModel = state.settings.resolveModelName(ModelPurpose.VISION),
             firstDeltaTimeoutMillis = state.settings.automation.autoModeTimeoutSeconds.coerceAtLeast(1) * 1000L,
             route = state.settings.processingRoute,
-            usingLocalOcr = state.settings.ocrModelSelection.providerId == LOCAL_OCR_PROVIDER_ID
+            usingLocalOcr = state.settings.ocrModelSelection.providerId == LOCAL_OCR_PROVIDER_ID,
+            trustAllHttpsCertificates = state.settings.trustAllHttpsCertificates
         )
     }
 
@@ -124,6 +126,7 @@ internal class ProcessingPipeline(
         userPrompt: String,
         imagesBase64: List<String> = emptyList(),
         firstDeltaTimeoutMillis: Long,
+        trustAllHttpsCertificates: Boolean,
         onDelta: (String) -> Unit
     ): String {
         val text = StringBuilder()
@@ -133,7 +136,8 @@ internal class ProcessingPipeline(
             systemPrompt = systemPrompt,
             userPrompt = userPrompt,
             imagesBase64 = imagesBase64,
-            firstDeltaTimeoutMillis = firstDeltaTimeoutMillis
+            firstDeltaTimeoutMillis = firstDeltaTimeoutMillis,
+            trustAllHttpsCertificates = trustAllHttpsCertificates
         ).collect { event ->
             when (event) {
                 is LlmEvent.TextDelta -> {
@@ -159,6 +163,7 @@ internal class ProcessingPipeline(
         userPrompt: String,
         imagesBase64: List<String> = emptyList(),
         firstDeltaTimeoutMillis: Long,
+        trustAllHttpsCertificates: Boolean,
         onThoughtDelta: (String) -> Unit
     ): StreamResult {
         val thought = StringBuilder()
@@ -170,7 +175,8 @@ internal class ProcessingPipeline(
             userPrompt = userPrompt,
             imagesBase64 = imagesBase64,
             tools = ToolRegistry.AUTOMATION_TOOLS,
-            firstDeltaTimeoutMillis = firstDeltaTimeoutMillis
+            firstDeltaTimeoutMillis = firstDeltaTimeoutMillis,
+            trustAllHttpsCertificates = trustAllHttpsCertificates
         ).collect { event ->
             when (event) {
                 is LlmEvent.TextDelta -> {
@@ -213,6 +219,7 @@ internal class ProcessingPipeline(
                     userPrompt = "请执行 OCR。",
                     imagesBase64 = listOf(bitmap.toBase64Jpeg()),
                     firstDeltaTimeoutMillis = models.firstDeltaTimeoutMillis,
+                    trustAllHttpsCertificates = models.trustAllHttpsCertificates,
                     onDelta = { if (index == bitmaps.lastIndex) onOcrDelta(it) }
                 )
             }
@@ -227,6 +234,7 @@ internal class ProcessingPipeline(
             systemPrompt = assistantPromptWithCopyMarker(models.assistant.textPrompt),
             userPrompt = "以下是 OCR 结果，请完成任务：\n$combinedOcrText",
             firstDeltaTimeoutMillis = models.firstDeltaTimeoutMillis,
+            trustAllHttpsCertificates = models.trustAllHttpsCertificates,
             onDelta = onAnswerDelta
         )
         AppDebugLogStore.i(tag, "streamOcrThenChat success ocrLength=${combinedOcrText.length} answerLength=${answer.length}")
@@ -247,6 +255,7 @@ internal class ProcessingPipeline(
             userPrompt = "请直接基于图片内容完成任务。",
             imagesBase64 = imagesBase64,
             firstDeltaTimeoutMillis = models.firstDeltaTimeoutMillis,
+            trustAllHttpsCertificates = models.trustAllHttpsCertificates,
             onDelta = onAnswerDelta
         )
         AppDebugLogStore.i(tag, "streamVisionDirect success answerLength=${answer.length}")
@@ -272,6 +281,7 @@ internal class ProcessingPipeline(
                     userPrompt = "请执行 OCR。",
                     imagesBase64 = listOf(bitmap.toBase64Jpeg()),
                     firstDeltaTimeoutMillis = models.firstDeltaTimeoutMillis,
+                    trustAllHttpsCertificates = models.trustAllHttpsCertificates,
                     onDelta = { if (index == bitmaps.lastIndex) onOcrDelta(it) }
                 )
             }
@@ -285,6 +295,7 @@ internal class ProcessingPipeline(
             systemPrompt = automationSystemPrompt(models.assistant.textPrompt),
             userPrompt = "以下是 OCR 结果，请先输出思考过程，再通过一次工具调用给出自动模式动作：\n$combinedOcrText",
             firstDeltaTimeoutMillis = models.firstDeltaTimeoutMillis,
+            trustAllHttpsCertificates = models.trustAllHttpsCertificates,
             onThoughtDelta = onThoughtDelta
         )
         val result = buildAutomationResult(streamResult)
@@ -306,6 +317,7 @@ internal class ProcessingPipeline(
             userPrompt = "请根据整张屏幕截图先输出思考过程，再通过一次工具调用给出自动模式动作。",
             imagesBase64 = imagesBase64,
             firstDeltaTimeoutMillis = models.firstDeltaTimeoutMillis,
+            trustAllHttpsCertificates = models.trustAllHttpsCertificates,
             onThoughtDelta = onThoughtDelta
         )
         val result = buildAutomationResult(streamResult)

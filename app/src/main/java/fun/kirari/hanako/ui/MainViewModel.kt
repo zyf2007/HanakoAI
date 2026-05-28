@@ -200,6 +200,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setTrustAllHttpsCertificates(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.update { it.copy(trustAllHttpsCertificates = enabled) }
+        }
+    }
+
     fun clearHistory() {
         viewModelScope.launch {
             repository.update { it.copy(history = emptyList(), lastResult = null) }

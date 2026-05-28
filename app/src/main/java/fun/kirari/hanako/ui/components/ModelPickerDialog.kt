@@ -48,6 +48,7 @@ data class ModelPickerEntry(
 @Composable
 fun rememberModelPickerState(
     provider: ModelProviderConfig,
+    trustAllHttpsCertificates: Boolean = false,
     api: ProviderModelsApi = ProviderModelsApi()
 ): ModelPickerState {
     val sessionFavoriteOrder = remember(provider.id) { provider.favoriteModels.normalizedModelNames() }
@@ -57,10 +58,10 @@ fun rememberModelPickerState(
     val locallyRemovedFavorites = remember(provider.id) { mutableStateListOf<String>() }
     var requestCancelled by remember(provider.id) { mutableStateOf(false) }
 
-    val networkModels by produceState<List<RemoteModelOption>?>(initialValue = null, provider.id, requestCancelled) {
+    val networkModels by produceState<List<RemoteModelOption>?>(initialValue = null, provider.id, requestCancelled, trustAllHttpsCertificates) {
         if (!requestCancelled) {
             try {
-                value = api.listModels(provider)
+                value = api.listModels(provider, trustAllHttpsCertificates)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -143,9 +144,14 @@ fun ModelPickerDialog(
     onPick: (String, Boolean) -> Unit,
     onToggleFavorite: (String, Boolean) -> Unit,
     onCustomModelRequest: (String) -> Unit,
+    trustAllHttpsCertificates: Boolean = false,
     api: ProviderModelsApi = ProviderModelsApi()
 ) {
-    val pickerState = rememberModelPickerState(provider = provider, api = api)
+    val pickerState = rememberModelPickerState(
+        provider = provider,
+        trustAllHttpsCertificates = trustAllHttpsCertificates,
+        api = api
+    )
     var query by remember { mutableStateOf("") }
     val filteredModels = remember(pickerState.entries, query) {
         filterModelEntries(pickerState.entries, query)

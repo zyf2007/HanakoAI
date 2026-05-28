@@ -378,6 +378,7 @@ fun HanakoApp(viewModel: MainViewModel) {
                     MoreSettingsScreen(
                         automationSettings = settings.automation,
                         selectedMethod = settings.screenCaptureMethod,
+                        trustAllHttpsCertificates = settings.trustAllHttpsCertificates,
                         onToggleCompletionNotification = { enabled ->
                             viewModel.updateAutomationSettings {
                                 it.copy(completionNotificationEnabled = enabled)
@@ -388,7 +389,8 @@ fun HanakoApp(viewModel: MainViewModel) {
                             viewModel.updateAutomationSettings {
                                 it.copy(autoModeTimeoutSeconds = seconds)
                             }
-                        }
+                        },
+                        onToggleTrustAllHttpsCertificates = viewModel::setTrustAllHttpsCertificates
                     )
                 }
                 composable(ROUTE_SETTINGS_DEBUG_LOGS) {
@@ -459,7 +461,8 @@ fun HanakoApp(viewModel: MainViewModel) {
             onCustomModelRequest = { dialogTitle ->
                 customModelTarget = pickerTarget
                 customModelDialogTitle = dialogTitle
-            }
+            },
+            trustAllHttpsCertificates = settings.trustAllHttpsCertificates
         )
     }
 
@@ -497,7 +500,8 @@ fun HanakoApp(viewModel: MainViewModel) {
             onToggleFavorite = { model, _ ->
                 viewModel.toggleFavoriteModel(previewProvider.id, model)
             },
-            onCustomModelRequest = { }
+            onCustomModelRequest = { },
+            trustAllHttpsCertificates = settings.trustAllHttpsCertificates
         )
     }
 

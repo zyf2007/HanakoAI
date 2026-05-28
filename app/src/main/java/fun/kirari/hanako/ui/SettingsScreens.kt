@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
@@ -106,7 +107,7 @@ fun SettingsMenuScreen(
         item {
             SettingsEntryCard(
                 title = "更多",
-                subtitle = "自动模式、屏幕录制方式、超时时间",
+                subtitle = "自动模式、屏幕录制方式、网络兼容",
                 icon = Icons.Default.SmartToy,
                 onClick = onNavigateMore
             )
@@ -118,9 +119,11 @@ fun SettingsMenuScreen(
 fun MoreSettingsScreen(
     automationSettings: AutomationSettings,
     selectedMethod: ScreenCaptureMethod,
+    trustAllHttpsCertificates: Boolean,
     onToggleCompletionNotification: (Boolean) -> Unit,
     onUpdateTimeoutSeconds: (Int) -> Unit,
-    onSelectMethod: (ScreenCaptureMethod) -> Unit
+    onSelectMethod: (ScreenCaptureMethod) -> Unit,
+    onToggleTrustAllHttpsCertificates: (Boolean) -> Unit
 ) {
     var timeoutInput by remember(automationSettings.autoModeTimeoutSeconds) {
         mutableStateOf(automationSettings.autoModeTimeoutSeconds.toString())
@@ -209,6 +212,40 @@ fun MoreSettingsScreen(
                         "默认 30 秒。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        item {
+            MoreSettingCard(
+                icon = Icons.Default.Security,
+                title = "网络兼容",
+                subtitle = "HTTP 与自签 HTTPS 测试接口。"
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            "信任所有 HTTPS 证书",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "允许连接自签名、过期或域名不匹配的 HTTPS 服务。存在安全风险，仅建议用于个人测试接口。HTTP 明文访问已允许。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = trustAllHttpsCertificates,
+                        onCheckedChange = onToggleTrustAllHttpsCertificates
                     )
                 }
             }
