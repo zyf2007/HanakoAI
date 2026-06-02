@@ -208,7 +208,7 @@ internal class ProcessingPipeline(
     ): Pair<String, String> {
         AppDebugLogStore.i(tag, "streamOcrThenChat ocrModel=${models.ocrModel} textModel=${models.textModel} imageCount=${bitmaps.size}")
         val ocrTexts = mutableListOf<String>()
-        bitmaps.forEachIndexed { index, bitmap ->
+        bitmaps.forEach { bitmap ->
             val ocrText = if (models.usingLocalOcr) {
                 runLocalOcr(bitmap)
             } else {
@@ -220,7 +220,7 @@ internal class ProcessingPipeline(
                     imagesBase64 = listOf(bitmap.toBase64Jpeg()),
                     firstDeltaTimeoutMillis = models.firstDeltaTimeoutMillis,
                     trustAllHttpsCertificates = models.trustAllHttpsCertificates,
-                    onDelta = { if (index == bitmaps.lastIndex) onOcrDelta(it) }
+                    onDelta = {}
                 )
             }
             ocrTexts.add(ocrText)
@@ -270,7 +270,7 @@ internal class ProcessingPipeline(
     ): Pair<String, AutomationResult> {
         AppDebugLogStore.i(tag, "streamOcrThenAutomation ocrModel=${models.ocrModel} textModel=${models.textModel} imageCount=${bitmaps.size}")
         val ocrTexts = mutableListOf<String>()
-        bitmaps.forEachIndexed { index, bitmap ->
+        bitmaps.forEach { bitmap ->
             val ocrText = if (models.usingLocalOcr) {
                 runLocalOcr(bitmap)
             } else {
@@ -282,7 +282,7 @@ internal class ProcessingPipeline(
                     imagesBase64 = listOf(bitmap.toBase64Jpeg()),
                     firstDeltaTimeoutMillis = models.firstDeltaTimeoutMillis,
                     trustAllHttpsCertificates = models.trustAllHttpsCertificates,
-                    onDelta = { if (index == bitmaps.lastIndex) onOcrDelta(it) }
+                    onDelta = {}
                 )
             }
             ocrTexts.add(ocrText)

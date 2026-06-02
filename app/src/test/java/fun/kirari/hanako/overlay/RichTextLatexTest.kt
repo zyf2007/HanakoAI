@@ -34,4 +34,80 @@ class RichTextLatexTest {
         )
         assertNotNull(result.astTree.findChildRecursive(GFMElementTypes.INLINE_MATH))
     }
+
+    @Test
+    fun preprocessMarkdown_turnsBracketLatexIntoBlockMath() {
+        val source = """
+            B：若 \(\sum_{n=1}^{\infty}u_n=s\)，则 \[
+            \sum_{n=1}^{\infty}(u_n+u_{n+1})
+            =2s-u_1
+            \]
+        """.trimIndent()
+
+        val result = parseMarkdown(source)
+
+        assertEquals(
+            """
+                B：若 $\sum_{n=1}^{\infty}u_n=s$，则
+                $$
+                \sum_{n=1}^{\infty}(u_n+u_{n+1})
+                =2s-u_1
+                $$
+            """.trimIndent(),
+            result.preprocessed.trimEnd()
+        )
+        assertNotNull(result.astTree.findChildRecursive(GFMElementTypes.BLOCK_MATH))
+    }
+
+    @Test
+    fun preprocessMarkdown_keepsDollarBlockMathAsBlockMath() {
+        val source = """
+            所以 C：\(\sum_{n=1}^{\infty}(-1)^n\left(1+\frac1n\right)^n\)，因为
+            $$
+            \left(1+\frac1n\right)^n \to e
+            $$
+            所以通项不趋于 0。
+        """.trimIndent()
+
+        val result = parseMarkdown(source)
+
+        assertEquals(
+            """
+                所以 C：$\sum_{n=1}^{\infty}(-1)^n\left(1+\frac1n\right)^n$，因为
+                $$
+                \left(1+\frac1n\right)^n \to e
+                $$
+                所以通项不趋于 0。
+            """.trimIndent(),
+            result.preprocessed
+        )
+        assertNotNull(result.astTree.findChildRecursive(GFMElementTypes.BLOCK_MATH))
+    }
+
+    @Test
+    fun preprocessMarkdown_unescapesDollarBlockMathDelimiters() {
+        val source = """
+            • B：若 \(\sum_{n=1}^{\infty}u_n=s\)，则
+            \$\$
+            \sum_{n=1}^{\infty}u_n+u_{n+1}
+            =2s-u_1
+            \$\$
+            不一定等于 \(2s\)，所以错误。
+        """.trimIndent()
+
+        val result = parseMarkdown(source)
+
+        assertEquals(
+            """
+                • B：若 $\sum_{n=1}^{\infty}u_n=s$，则
+                $$
+                \sum_{n=1}^{\infty}u_n+u_{n+1}
+                =2s-u_1
+                $$
+                不一定等于 $2s$，所以错误。
+            """.trimIndent(),
+            result.preprocessed
+        )
+        assertNotNull(result.astTree.findChildRecursive(GFMElementTypes.BLOCK_MATH))
+    }
 }

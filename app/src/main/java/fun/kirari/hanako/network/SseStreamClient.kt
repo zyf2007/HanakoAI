@@ -1,7 +1,11 @@
 package `fun`.kirari.hanako.network
 
 import `fun`.kirari.hanako.debug.AppDebugLogStore
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -36,9 +40,13 @@ internal class SseStreamClient(
             val finished = AtomicBoolean(false)
             val firstDeltaReceived = AtomicBoolean(false)
             var eventCount = 0
+            var eventSourceRef: EventSource? = null
+            var timeoutJobRef: Job? = null
 
             fun finish(block: () -> Unit) {
                 if (finished.compareAndSet(false, true)) {
+                    timeoutJobRef?.cancel()
+                    eventSourceRef?.cancel()
                     block()
                 }
             }
@@ -63,22 +71,22 @@ internal class SseStreamClient(
                         val delta = result?.delta
                         if (!delta.isNullOrEmpty()) {
                             firstDeltaReceived.set(true)
+                            timeoutJobRef?.cancel()
                             builder.append(delta)
                             onDelta(delta)
                         }
                         if (result?.done == true) {
                             AppDebugLogStore.i(tag, "stream completed by protocol signal totalEvents=$eventCount outputLength=${builder.length} url=${request.url}")
                             finish { cont.resume(builder.toString()) }
-                            eventSource.cancel()
                         }
                     } catch (t: Throwable) {
                         finish { cont.resumeWithException(t) }
-                        eventSource.cancel()
                     }
                 }
 
                 override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                     AppDebugLogStore.e(tag, "stream failure code=${response?.code} url=${request.url}", t)
+                    response?.close()
                     val normalized = if (
                         !firstDeltaReceived.get() &&
                         (t is SocketTimeoutException || t?.message?.contains("timeout", ignoreCase = true) == true)
@@ -103,7 +111,29 @@ internal class SseStreamClient(
             }
 
             val eventSource = EventSources.createFactory(client).newEventSource(request, listener)
-            cont.invokeOnCancellation { eventSource.cancel() }
+            eventSourceRef = eventSource
+            val timeoutJob = CoroutineScope(cont.context).launch {
+                delay(firstDeltaTimeoutMillis)
+                if (!firstDeltaReceived.get()) {
+                    AppDebugLogStore.e(
+                        tag,
+                        "stream first delta timeout after ${firstDeltaTimeoutMillis}ms url=${request.url}",
+                        null
+                    )
+                    finish {
+                        cont.resumeWithException(
+                            SocketTimeoutException("自动模式首字延迟超时（${firstDeltaTimeoutMillis / 1000} 秒）")
+                        )
+                    }
+                }
+            }
+            timeoutJobRef = timeoutJob
+            cont.invokeOnCancellation {
+                if (finished.compareAndSet(false, true)) {
+                    timeoutJob.cancel()
+                    eventSource.cancel()
+                }
+            }
         }
     }
 }

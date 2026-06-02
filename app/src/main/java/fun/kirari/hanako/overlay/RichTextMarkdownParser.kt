@@ -16,7 +16,9 @@ internal val markdownParser by lazy {
 }
 
 internal val inlineLatexRegex = Regex("""\\\((.+?)\\\)""", RegexOption.DOT_MATCHES_ALL)
-internal val blockLatexRegex = Regex("""\\\[(.+?)\\\]""", RegexOption.DOT_MATCHES_ALL)
+internal val blockLatexRegex = Regex("""[ \t]*\\\[(.+?)\\\][ \t]*""", RegexOption.DOT_MATCHES_ALL)
+internal val escapedDollarBlockDelimiterRegex = Regex("""(?m)^([ \t]*)\\\$\\\$[ \t]*$""")
+internal val dollarBlockLatexRegex = Regex("""(?m)(^|[ \t]*\n)[ \t]*\$\$[ \t]*\n?([\s\S]+?)\n?[ \t]*\$\$[ \t]*(?=\n|$)""")
 internal val codeBlockRegex = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
 internal val breakLineRegex = Regex("(?i)<br\\s*/?>")
 internal val copyMarkerRegex = Regex("""\[(?:copy|复制):(.*?)\]""", RegexOption.DOT_MATCHES_ALL)
@@ -58,11 +60,26 @@ internal fun preprocessMarkdown(content: String): Pair<String, List<CopyMarkerTo
 
     fun inCodeBlock(index: Int): Boolean = codeBlocks.any { index in it }
 
-    var result = inlineLatexRegex.replace(copyPreprocessed) { match ->
+    var result = escapedDollarBlockDelimiterRegex.replace(copyPreprocessed) { match ->
+        if (inCodeBlock(match.range.first)) match.value else "${match.groupValues[1]}${'$'}${'$'}"
+    }
+    result = inlineLatexRegex.replace(result) { match ->
         if (inCodeBlock(match.range.first)) match.value else "${'$'}${match.groupValues[1]}${'$'}"
     }
     result = blockLatexRegex.replace(result) { match ->
-        if (inCodeBlock(match.range.first)) match.value else "${'$'}${'$'}${match.groupValues[1]}${'$'}${'$'}"
+        if (inCodeBlock(match.range.first)) {
+            match.value
+        } else {
+            "\n${'$'}${'$'}\n${match.groupValues[1].trim()}\n${'$'}${'$'}\n"
+        }
+    }
+    result = dollarBlockLatexRegex.replace(result) { match ->
+        if (inCodeBlock(match.range.first)) {
+            match.value
+        } else {
+            val prefix = if (match.groupValues[1].contains('\n')) "\n" else match.groupValues[1]
+            "${prefix}${'$'}${'$'}\n${match.groupValues[2].trim()}\n${'$'}${'$'}"
+        }
     }
     return result to copyMarkers
 }
