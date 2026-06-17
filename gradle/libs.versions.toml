@@ -16,6 +16,7 @@ kotlinxSerializationJson = "1.7.3"
 kotlinxCoroutinesPlayServices = "1.10.2"
 okhttp = "4.12.0"
 okhttpSse = "4.12.0"
+coroutinesTest = "1.10.2"
 coil = "2.7.0"
 markdown = "0.7.3"
 jlatexmath = "0.2.0"
@@ -50,6 +51,8 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "kotlinxCoroutinesPlayServices" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-sse = { group = "com.squareup.okhttp3", name = "okhttp-sse", version.ref = "okhttpSse" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutinesTest" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 jetbrains-markdown = { module = "org.jetbrains:markdown", version.ref = "markdown" }
 jlatexmath = { module = "ru.noties:jlatexmath-android", version.ref = "jlatexmath" }

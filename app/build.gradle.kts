@@ -135,6 +135,8 @@ dependencies {
     implementation(libs.shizuku.provider)
     "fullImplementation"(libs.mlkit.text.recognition.chinese)
     testImplementation(libs.junit)
+    testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

@@ -26,18 +26,22 @@ data class ConnectionTestResult(
 class ProviderModelsApi(
     private val clientProvider: NetworkClientProvider = NetworkClientProvider(),
     private val json: Json = Json { ignoreUnknownKeys = true }
-) {
+) : ConnectionTester {
+    private companion object {
+        const val TIMEOUT_MILLIS = 60_000L
+    }
+    private fun authenticatedRequestBuilder(provider: ModelProviderConfig): Request.Builder =
+        Request.Builder()
+            .url(provider.modelsRequestUrl())
+            .authenticateFor(provider)
+
     suspend fun listModels(
         provider: ModelProviderConfig,
         trustAllHttpsCertificates: Boolean = false
     ): List<RemoteModelOption> = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(provider.modelsRequestUrl())
-            .addHeader("Authorization", "Bearer ${provider.apiKey}")
-            .get()
-            .build()
+        val request = authenticatedRequestBuilder(provider).get().build()
 
-        clientProvider.client(trustAllHttpsCertificates).newCall(request).execute().use { response ->
+        clientProvider.client(trustAllHttpsCertificates, TIMEOUT_MILLIS).newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 error("Failed to get models: ${response.code} ${response.body?.string()}")
             }
@@ -65,19 +69,22 @@ class ProviderModelsApi(
         }
     }
 
-    suspend fun testConnection(
+    override suspend fun testConnection(
         provider: ModelProviderConfig,
-        trustAllHttpsCertificates: Boolean = false
+        trustAllHttpsCertificates: Boolean
     ): ConnectionTestResult = withContext(Dispatchers.IO) {
+        if (provider.apiKey.isBlank()) {
+            return@withContext ConnectionTestResult(
+                success = false,
+                errorMessage = "请填写 API 密钥"
+            )
+        }
+
         val startTime = System.currentTimeMillis()
         try {
-            val request = Request.Builder()
-                .url(provider.modelsRequestUrl())
-                .addHeader("Authorization", "Bearer ${provider.apiKey}")
-                .get()
-                .build()
+            val request = authenticatedRequestBuilder(provider).get().build()
 
-            clientProvider.client(trustAllHttpsCertificates).newCall(request).execute().use { response ->
+            clientProvider.client(trustAllHttpsCertificates, TIMEOUT_MILLIS).newCall(request).execute().use { response ->
                 val latency = System.currentTimeMillis() - startTime
                 if (!response.isSuccessful) {
                     val body = response.body?.string().orEmpty()

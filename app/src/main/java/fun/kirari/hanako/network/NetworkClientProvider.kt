@@ -33,7 +33,11 @@ class NetworkClientProvider {
             .build()
     }
 
-    fun client(trustAllHttpsCertificates: Boolean): OkHttpClient {
-        return if (trustAllHttpsCertificates) trustAllClient else safeClient
+    fun client(trustAllHttpsCertificates: Boolean, timeoutMillis: Long = 0): OkHttpClient {
+        val base = if (trustAllHttpsCertificates) trustAllClient else safeClient
+        return if (timeoutMillis > 0) base.newBuilder()
+            .readTimeout(timeoutMillis, TimeUnit.MILLISECONDS)
+            .build()
+        else base
     }
 }

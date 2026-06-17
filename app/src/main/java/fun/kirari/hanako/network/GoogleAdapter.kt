@@ -61,7 +61,7 @@ internal class GoogleAdapter(
         var toolArgs: JsonObject? = null
 
         sseClient.stream(
-            request = baseRequest(request.provider, url, payload, json, mediaType, googleApiKeyHeader = true),
+            request = baseRequest(request.provider, url, payload, json, mediaType),
             firstDeltaTimeoutMillis = request.firstDeltaTimeoutMillis,
             onEvent = { _, _, _, data ->
                 val root = runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull()

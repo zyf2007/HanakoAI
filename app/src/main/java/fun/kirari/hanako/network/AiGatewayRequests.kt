@@ -1,7 +1,6 @@
 package `fun`.kirari.hanako.network
 
 import `fun`.kirari.hanako.data.ModelProviderConfig
-import `fun`.kirari.hanako.data.ProviderKind
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import okhttp3.MediaType
@@ -14,8 +13,7 @@ internal fun baseRequest(
     payload: JsonObject,
     json: Json,
     mediaType: MediaType,
-    headers: Map<String, String> = emptyMap(),
-    googleApiKeyHeader: Boolean = false
+    headers: Map<String, String> = emptyMap()
 ): Request {
     val base = provider.baseUrl.trimEnd('/')
     require(base.isNotBlank()) { "请先填写 Base URL" }
@@ -24,20 +22,7 @@ internal fun baseRequest(
         .url(url)
         .header("Content-Type", "application/json")
         .post(json.encodeToString(JsonObject.serializer(), payload).toRequestBody(mediaType))
-
-    when (provider.kind) {
-        ProviderKind.GOOGLE -> {
-            builder.header("x-goog-api-key", provider.apiKey)
-        }
-
-        ProviderKind.ANTHROPIC -> {
-            builder.header("x-api-key", provider.apiKey)
-        }
-
-        else -> {
-            builder.header("Authorization", "Bearer ${provider.apiKey}")
-        }
-    }
+        .authenticateFor(provider)
 
     headers.forEach { (key, value) ->
         builder.header(key, value)
@@ -49,6 +34,5 @@ internal fun AiGateway.baseRequest(
     provider: ModelProviderConfig,
     url: String,
     payload: JsonObject,
-    headers: Map<String, String> = emptyMap(),
-    googleApiKeyHeader: Boolean = false
-): Request = baseRequest(provider, url, payload, json, JSON, headers, googleApiKeyHeader)
+    headers: Map<String, String> = emptyMap()
+): Request = baseRequest(provider, url, payload, json, JSON, headers)

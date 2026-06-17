@@ -21,13 +21,10 @@ import `fun`.kirari.hanako.data.LOCAL_OCR_MODEL_ID
 import `fun`.kirari.hanako.data.LOCAL_OCR_PROVIDER_ID
 import `fun`.kirari.hanako.data.modelSelectionFor
 import `fun`.kirari.hanako.localocr.LocalOcrManager
-import `fun`.kirari.hanako.network.ConnectionTestResult
 import `fun`.kirari.hanako.network.ProviderModelsApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,9 +45,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: SettingsRepository = container.settingsRepository
     private val localOcrManager: LocalOcrManager = container.localOcrManager
     private val providerModelsApi = ProviderModelsApi(container.networkClientProvider)
-
-    private val _connectionTestState = MutableStateFlow(ConnectionTestState())
-    val connectionTestState: StateFlow<ConnectionTestState> = _connectionTestState.asStateFlow()
+    private val connectionTestManager = ConnectionTestManager(providerModelsApi, viewModelScope)
 
     val settings: StateFlow<AppSettings> = repository.settings.stateIn(
         scope = viewModelScope,
@@ -63,6 +58,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateProvider(provider: ModelProviderConfig) {
+        val previous = settings.value.providers.firstOrNull { it.id == provider.id }
         viewModelScope.launch {
             repository.update { current ->
                 current.copy(
@@ -70,7 +66,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
         }
+        if (previous != null && previous.hasAuthChanged(provider)) {
+            connectionTestManager.reset(provider.id)
+        }
     }
+
+    private fun ModelProviderConfig.hasAuthChanged(other: ModelProviderConfig): Boolean =
+        kind != other.kind || baseUrl != other.baseUrl || apiKey != other.apiKey
 
     fun addProvider() {
         viewModelScope.launch {
@@ -91,6 +93,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteProvider(providerId: String) {
+        connectionTestManager.reset(providerId)
         viewModelScope.launch {
             repository.update { current ->
                 val remaining = current.providers.filterNot { it.id == providerId }
@@ -252,28 +255,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun testProviderConnection(provider: ModelProviderConfig) {
-        _connectionTestState.value = ConnectionTestState(status = ConnectionTestStatus.TESTING)
-        viewModelScope.launch {
-            val trustAll = settings.value.trustAllHttpsCertificates
-            val result = providerModelsApi.testConnection(provider, trustAll)
-            _connectionTestState.value = if (result.success) {
-                ConnectionTestState(
-                    status = ConnectionTestStatus.SUCCESS,
-                    latencyMs = result.latencyMs
-                )
-            } else {
-                ConnectionTestState(
-                    status = ConnectionTestStatus.FAILED,
-                    latencyMs = result.latencyMs,
-                    errorMessage = result.errorMessage
-                )
-            }
-        }
-    }
+    fun connectionTestState(providerId: String): StateFlow<ConnectionTestState> =
+        connectionTestManager.stateFor(providerId)
 
-    fun resetConnectionTest() {
-        _connectionTestState.value = ConnectionTestState()
+    fun testProviderConnection(provider: ModelProviderConfig) {
+        val trustAll = settings.value.trustAllHttpsCertificates
+        connectionTestManager.test(provider, trustAll)
     }
 
     fun clearDebugLogs() {

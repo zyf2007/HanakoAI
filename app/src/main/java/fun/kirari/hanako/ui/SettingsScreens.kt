@@ -424,6 +424,7 @@ fun ProviderDetailScreen(
                         onClick = { onTestConnection(provider) },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = connectionTestState.status != ConnectionTestStatus.TESTING
+                                && provider.apiKey.isNotBlank()
                     ) {
                         if (connectionTestState.status == ConnectionTestStatus.TESTING) {
                             CircularProgressIndicator(
@@ -435,6 +436,13 @@ fun ProviderDetailScreen(
                         } else {
                             Text("测试连接")
                         }
+                    }
+                    if (provider.apiKey.isBlank()) {
+                        Text(
+                            text = "请先填写 API 密钥",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                     ConnectionTestResultBanner(connectionTestState)
                 }
