@@ -63,6 +63,7 @@ fun HeroSection(
     overlayEnabled: Boolean,
     hasOverlayPermission: Boolean,
     captureMethod: ScreenCaptureMethod,
+    staticModeEnabled: Boolean,
     route: ProcessingRoute,
     onSelectRoute: (ProcessingRoute) -> Unit,
     onOpenOverlayPermission: () -> Unit,
@@ -219,10 +220,16 @@ fun HeroSection(
                             .combinedClickable(
                                 enabled = hasOverlayPermission,
                                 onClick = {
-                                    onToggleOverlay(!overlayEnabled && hasOverlayPermission)
+                                    if (overlayEnabled) {
+                                        onToggleOverlay(false)
+                                    } else if (staticModeEnabled) {
+                                        onStartAutoMode()
+                                    } else {
+                                        onToggleOverlay(true)
+                                    }
                                 },
                                 onLongClick = {
-                                    if (!overlayEnabled && hasOverlayPermission) {
+                                    if (!overlayEnabled && hasOverlayPermission && !staticModeEnabled) {
                                         onStartAutoMode()
                                     }
                                 }
@@ -282,7 +289,11 @@ fun HeroSection(
                     !overlayEnabled
                 ) {
                     Text(
-                        "提示：点击启动进入普通模式，长按启动进入自动模式；Android 14+ 首次会弹出截屏授权。",
+                        if (staticModeEnabled) {
+                            "提示：静态模式已开启，点击启动直接进入自动模式；Android 14+ 首次会弹出截屏授权。"
+                        } else {
+                            "提示：点击启动进入普通模式，长按启动进入自动模式；Android 14+ 首次会弹出截屏授权。"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
                     )
@@ -294,7 +305,11 @@ fun HeroSection(
                     )
                 } else if (!overlayEnabled) {
                     Text(
-                        "点击启动进入普通模式，长按启动进入自动模式。",
+                        if (staticModeEnabled) {
+                            "静态模式已开启，点击启动直接进入自动模式。"
+                        } else {
+                            "点击启动进入普通模式，长按启动进入自动模式。"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
                     )

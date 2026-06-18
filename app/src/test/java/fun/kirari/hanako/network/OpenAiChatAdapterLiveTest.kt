@@ -4,18 +4,18 @@ import `fun`.kirari.hanako.data.ModelProviderConfig
 import `fun`.kirari.hanako.data.ProviderKind
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.runBlocking
-import okhttp3.OkHttpClient
+import org.junit.Assume.assumeTrue
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.concurrent.TimeUnit
 
 class OpenAiChatAdapterLiveTest {
     @Test
     fun streams_from_openai_compatible_endpoint() = runBlocking {
         val baseUrl = System.getenv("HANAKO_TEST_BASE_URL")
-            ?: error("Missing HANAKO_TEST_BASE_URL")
         val apiKey = System.getenv("HANAKO_TEST_API_KEY")
-            ?: error("Missing HANAKO_TEST_API_KEY")
+        assumeTrue("Missing HANAKO_TEST_BASE_URL or HANAKO_TEST_API_KEY", !baseUrl.isNullOrBlank() && !apiKey.isNullOrBlank())
+        val resolvedBaseUrl = requireNotNull(baseUrl)
+        val resolvedApiKey = requireNotNull(apiKey)
         val model = System.getenv("HANAKO_TEST_MODEL")
             ?: "gpt-4o-mini"
         val systemPrompt = System.getenv("HANAKO_TEST_SYSTEM_PROMPT")
@@ -26,19 +26,14 @@ class OpenAiChatAdapterLiveTest {
         val provider = ModelProviderConfig(
             name = "LiveTest",
             kind = ProviderKind.OPENAI_COMPATIBLE,
-            baseUrl = baseUrl,
-            apiKey = apiKey,
+            baseUrl = resolvedBaseUrl,
+            apiKey = resolvedApiKey,
             chatModel = model,
             visionModel = model,
             ocrModel = model
         )
 
-        val client = UnifiedLLMClient(
-            OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(0, TimeUnit.MILLISECONDS)
-                .build()
-        )
+        val client = UnifiedLLMClient(NetworkClientProvider())
 
         val events = mutableListOf<LlmEvent>()
 

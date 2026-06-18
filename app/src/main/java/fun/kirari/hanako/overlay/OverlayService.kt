@@ -80,6 +80,7 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
     private var bubbleSpinnerView: ProgressBar? = null
     private var bubbleColorAnimator: ValueAnimator? = null
     private var bubbleCompletionResetJob: Job? = null
+    private var bubbleLetterVibrationJob: Job? = null
     private var lastHandledCompletionId: String? = null
     private var panelView: FrameLayout? = null
     private var panelContentView: androidx.compose.ui.platform.ComposeView? = null
@@ -146,6 +147,8 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         bubbleColorAnimator = null
         bubbleCompletionResetJob?.cancel()
         bubbleCompletionResetJob = null
+        bubbleLetterVibrationJob?.cancel()
+        bubbleLetterVibrationJob = null
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         bubbleView = null
         bubbleSurfaceView = null
@@ -192,12 +195,23 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                             overlayViewModel.consumeAutoCompletedState()
                         }
                     }
+                    if (state.settings.automation.staticModeEnabled && !state.pendingVibrationLetters.isNullOrBlank()) {
+                        val letters = state.pendingVibrationLetters
+                        bubbleLetterVibrationJob?.cancel()
+                        bubbleLetterVibrationJob = serviceScope.launch {
+                            AppDebugLogStore.i(logTag, "start pending letter vibration letters=$letters")
+                            vibrateLetters(letters, state.settings.automation)
+                            overlayViewModel.consumePendingVibrationLetters()
+                        }
+                    }
                 } else {
                     if (bubbleCompletionResetJob != null) {
                         AppDebugLogStore.d(logTag, "auto completion reset job cancelled because state=${state.autoRunState}")
                     }
                     bubbleCompletionResetJob?.cancel()
                     bubbleCompletionResetJob = null
+                    bubbleLetterVibrationJob?.cancel()
+                    bubbleLetterVibrationJob = null
                 }
             }
         }
@@ -596,7 +610,19 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         val icon = bubbleIconView ?: return
         val textView = bubbleTextView
         val spinner = bubbleSpinnerView
-        val appearance = BubbleRenderer.render(bubbleState, launchMode, this)
+        val staticModeEnabled = overlayViewModel.uiState.value.settings.automation.staticModeEnabled
+        val appearance = BubbleRenderer.render(bubbleState, launchMode, this, staticModeEnabled)
+        val bubbleLayoutParams = bubble.layoutParams as? FrameLayout.LayoutParams
+        if (bubbleLayoutParams != null) {
+            val sizePx = (40f * resources.displayMetrics.density * appearance.sizeScale).roundToInt()
+            if (bubbleLayoutParams.width != sizePx || bubbleLayoutParams.height != sizePx) {
+                bubbleLayoutParams.width = sizePx
+                bubbleLayoutParams.height = sizePx
+                bubbleLayoutParams.gravity = Gravity.CENTER
+                bubble.layoutParams = bubbleLayoutParams
+                bubble.requestLayout()
+            }
+        }
         
         val existing = bubble.background as? GradientDrawable
         val drawable = existing ?: GradientDrawable().apply {
@@ -605,13 +631,18 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         }
         val startColor = existing?.color?.defaultColor ?: appearance.backgroundColor
         bubbleColorAnimator?.cancel()
-        bubbleColorAnimator = ValueAnimator.ofArgb(startColor, appearance.backgroundColor).apply {
-            duration = 220L
-            addUpdateListener { animator ->
-                drawable.setColor(animator.animatedValue as Int)
-                bubble.background = drawable
+        if (appearance.animateTransitions) {
+            bubbleColorAnimator = ValueAnimator.ofArgb(startColor, appearance.backgroundColor).apply {
+                duration = 220L
+                addUpdateListener { animator ->
+                    drawable.setColor(animator.animatedValue as Int)
+                    bubble.background = drawable
+                }
+                start()
             }
-            start()
+        } else {
+            drawable.setColor(appearance.backgroundColor)
+            bubble.background = drawable
         }
 
         if (appearance.letters != null) {
@@ -619,10 +650,13 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
             textView?.setTextColor(appearance.iconTint)
             textView?.visibility = View.VISIBLE
             icon.visibility = View.GONE
+        } else if (!appearance.showIcon) {
+            textView?.visibility = View.GONE
+            icon.visibility = View.GONE
         } else {
             textView?.visibility = View.GONE
             icon.visibility = View.VISIBLE
-            if (icon.tag != appearance.iconRes) {
+            if (appearance.animateTransitions && icon.tag != appearance.iconRes) {
                 icon.animate().cancel()
                 icon.animate()
                     .alpha(0f)
@@ -660,13 +694,22 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
             animate().cancel()
             if (appearance.showSpinner) {
                 visibility = View.VISIBLE
-                animate().alpha(1f).setDuration(160L).start()
+                if (appearance.animateTransitions) {
+                    animate().alpha(1f).setDuration(160L).start()
+                } else {
+                    alpha = 1f
+                }
             } else {
-                animate()
-                    .alpha(0f)
-                    .setDuration(160L)
-                    .withEndAction { visibility = View.GONE }
-                    .start()
+                if (appearance.animateTransitions) {
+                    animate()
+                        .alpha(0f)
+                        .setDuration(160L)
+                        .withEndAction { visibility = View.GONE }
+                        .start()
+                } else {
+                    alpha = 0f
+                    visibility = View.GONE
+                }
             }
         }
     }

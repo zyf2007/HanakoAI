@@ -110,7 +110,10 @@ enum class ScreenCaptureMethod {
 @Serializable
 data class AutomationSettings(
     val completionNotificationEnabled: Boolean = true,
-    val autoModeTimeoutSeconds: Int = 30
+    val autoModeTimeoutSeconds: Int = 30,
+    val staticModeEnabled: Boolean = false,
+    val staticIntraLetterGapMs: Int = 400,
+    val staticInterLetterGapMs: Int = 1000
 )
 
 @Serializable
@@ -184,21 +187,27 @@ enum class AutomationActionType {
 
 fun defaultProvider(): ModelProviderConfig = ModelProviderConfig()
 
-fun defaultAssistants(): List<AssistantPreset> = listOf(
-    defaultAssistant(),
-    AssistantPreset(
-        name = "题目解答助手",
-        ocrPrompt = "请准确提取图片中的题目、选项、公式和注释，尽量保持原有结构，不要解释。",
-        textPrompt = "你是题目解答助手。请先识别题目内容，再给出解题思路、关键知识点和答案。",
-        visionPrompt = "你是题目解答助手。请直接阅读图片中的题目内容，给出解题思路、关键知识点和答案。"
-    )
+fun defaultAssistants(): List<AssistantPreset> = listOf(defaultAssistant())
+
+fun defaultAssistant(): AssistantPreset = problemSolvingAssistantPreset()
+
+private fun problemSolvingAssistantPreset(): AssistantPreset = AssistantPreset(
+    name = "题目解答助手",
+    ocrPrompt = "请准确提取图片中的题目、选项、公式和注释，尽量保持原有结构，不要解释。",
+    textPrompt = "你是题目解答助手。请先识别题目内容，再给出解题思路、关键知识点和答案。",
+    visionPrompt = "你是题目解答助手。请直接阅读图片中的题目内容，给出解题思路、关键知识点和答案。"
 )
 
-fun defaultAssistant(): AssistantPreset = AssistantPreset(
+private fun legacyChatSummaryAssistantPreset(): AssistantPreset = AssistantPreset(
     name = "聊天记录总结助手",
     ocrPrompt = "请准确提取图片中的全部文字，按原有结构输出，不要解释。",
     textPrompt = "你是聊天记录总结助手。请提炼重点、待办、情绪倾向，并用简洁中文输出。",
     visionPrompt = "你是聊天记录总结助手。请直接阅读图片内容，提炼重点、待办、情绪倾向，并用简洁中文输出。"
+)
+
+private fun legacyDefaultAssistants(): List<AssistantPreset> = listOf(
+    legacyChatSummaryAssistantPreset(),
+    problemSolvingAssistantPreset()
 )
 
 fun AssistantPreset.previewPrompt(): String {
@@ -250,8 +259,14 @@ fun AppSettings.resolveModelName(purpose: ModelPurpose): String {
 }
 
 fun AppSettings.normalize(): AppSettings {
+    val normalizedAssistants = normalizeAssistants(
+        assistants = assistants,
+        selectedAssistantId = selectedAssistantId
+    )
     val fallbackProvider = providers.firstOrNull { it.id == selectedProviderId } ?: providers.firstOrNull()
     return copy(
+        assistants = normalizedAssistants.assistants,
+        selectedAssistantId = normalizedAssistants.selectedAssistantId,
         textModelSelection = textModelSelection.normalize(
             providers = providers,
             fallbackProvider = fallbackProvider,
@@ -270,6 +285,42 @@ fun AppSettings.normalize(): AppSettings {
             } ?: fallbackProvider?.visionModel.orEmpty()
         )
     )
+}
+
+private data class NormalizedAssistants(
+    val assistants: List<AssistantPreset>,
+    val selectedAssistantId: String?
+)
+
+private fun normalizeAssistants(
+    assistants: List<AssistantPreset>,
+    selectedAssistantId: String?
+): NormalizedAssistants {
+    val normalizedAssistants = when {
+        assistants.isEmpty() -> defaultAssistants()
+        assistants.matchesLegacyDefaultAssistants() -> defaultAssistants()
+        else -> assistants
+    }
+    val normalizedSelectedAssistantId = normalizedAssistants.firstOrNull { it.id == selectedAssistantId }?.id
+        ?: normalizedAssistants.firstOrNull()?.id
+    return NormalizedAssistants(
+        assistants = normalizedAssistants,
+        selectedAssistantId = normalizedSelectedAssistantId
+    )
+}
+
+private fun List<AssistantPreset>.matchesLegacyDefaultAssistants(): Boolean {
+    val legacyDefaults = legacyDefaultAssistants()
+    return size == legacyDefaults.size && zip(legacyDefaults).all { (current, legacy) ->
+        current.samePromptProfileAs(legacy)
+    }
+}
+
+private fun AssistantPreset.samePromptProfileAs(other: AssistantPreset): Boolean {
+    return name == other.name &&
+        ocrPrompt == other.ocrPrompt &&
+        textPrompt == other.textPrompt &&
+        visionPrompt == other.visionPrompt
 }
 
 private fun ModelSelection.normalize(

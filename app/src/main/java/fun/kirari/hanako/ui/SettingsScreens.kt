@@ -2,7 +2,18 @@
 
 package `fun`.kirari.hanako.ui
 
+import android.app.Service
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +38,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Timer
@@ -42,6 +54,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +65,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.data.AppSettings
 import `fun`.kirari.hanako.data.AssistantPreset
@@ -124,6 +138,8 @@ fun MoreSettingsScreen(
     selectedMethod: ScreenCaptureMethod,
     trustAllHttpsCertificates: Boolean,
     onToggleCompletionNotification: (Boolean) -> Unit,
+    onToggleStaticMode: (Boolean) -> Unit,
+    onNavigateStaticVibrationSettings: () -> Unit,
     onUpdateTimeoutSeconds: (Int) -> Unit,
     onSelectMethod: (ScreenCaptureMethod) -> Unit,
     onToggleTrustAllHttpsCertificates: (Boolean) -> Unit
@@ -171,6 +187,33 @@ fun MoreSettingsScreen(
                         Switch(
                             checked = automationSettings.completionNotificationEnabled,
                             onCheckedChange = onToggleCompletionNotification
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable(onClick = onNavigateStaticVibrationSettings),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                "静态模式",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "隐藏悬浮球动画，使用振动表示识别结果",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = automationSettings.staticModeEnabled,
+                            onCheckedChange = onToggleStaticMode
                         )
                     }
                     Column(
@@ -307,6 +350,79 @@ fun MoreSettingsScreen(
 }
 
 @Composable
+fun StaticVibrationSettingsScreen(
+    automationSettings: AutomationSettings,
+    onUpdateSettings: ((AutomationSettings) -> AutomationSettings) -> Unit
+) {
+    val context = LocalContext.current
+    var intraLetterGapInput by remember(automationSettings.staticIntraLetterGapMs) {
+        mutableStateOf(automationSettings.staticIntraLetterGapMs.toString())
+    }
+    var interLetterGapInput by remember(automationSettings.staticInterLetterGapMs) {
+        mutableStateOf(automationSettings.staticInterLetterGapMs.toString())
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            SectionCard(title = "静态模式振动") {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "使用振动次数表示答案对应的选项。隐藏悬浮球动画和弹窗。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    VibrationDurationField(
+                        label = "单个字母内部间隔",
+                        value = intraLetterGapInput,
+                        onValueChange = { value ->
+                            val digits = value.filter(Char::isDigit)
+                            intraLetterGapInput = digits
+                            digits.toIntOrNull()?.takeIf { it >= 0 }?.let { gap ->
+                                onUpdateSettings { current ->
+                                    current.copy(staticIntraLetterGapMs = gap)
+                                }
+                            }
+                        }
+                    )
+                    VibrationDurationField(
+                        label = "字母之间间隔",
+                        value = interLetterGapInput,
+                        onValueChange = { value ->
+                            val digits = value.filter(Char::isDigit)
+                            interLetterGapInput = digits
+                            digits.toIntOrNull()?.takeIf { it >= 0 }?.let { gap ->
+                                onUpdateSettings { current ->
+                                    current.copy(staticInterLetterGapMs = gap)
+                                }
+                            }
+                        }
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            playPreviewVibration(context, automationSettings, "ABCD")
+                            Toast.makeText(context, "正在试听 ABCD", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text("试听 ABCD")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun ProviderSettingsScreen(
     settings: AppSettings,
     onAddProvider: () -> Unit,
@@ -396,9 +512,14 @@ fun ProviderDetailScreen(
     connectionTestState: ConnectionTestState,
     onUpdateProvider: (ModelProviderConfig) -> Unit,
     onViewModels: () -> Unit,
-    onTestConnection: (ModelProviderConfig) -> Unit
+    onTestConnection: (ModelProviderConfig) -> Unit,
+    onClearConnectionTest: () -> Unit
 ) {
     val context = LocalContext.current
+    DisposableEffect(provider.id) {
+        onDispose { onClearConnectionTest() }
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -420,23 +541,31 @@ fun ProviderDetailScreen(
                     ) {
                         Text("查看可用模型")
                     }
-                    OutlinedButton(
-                        onClick = { onTestConnection(provider) },
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = connectionTestState.status != ConnectionTestStatus.TESTING
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (connectionTestState.status == ConnectionTestStatus.TESTING) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.size(8.dp))
-                            Text("测试中...")
-                        } else {
-                            Text("测试连接")
+                        OutlinedButton(
+                            onClick = { onTestConnection(provider) },
+                            enabled = connectionTestState.status != ConnectionTestStatus.TESTING
+                        ) {
+                            if (connectionTestState.status == ConnectionTestStatus.TESTING) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.size(8.dp))
+                                Text("测试中...")
+                            } else {
+                                Text("测试连接")
+                            }
                         }
+                        ConnectionTestInlineResult(
+                            state = connectionTestState,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
                     }
-                    ConnectionTestResultBanner(connectionTestState)
                 }
             }
         }
@@ -680,67 +809,124 @@ private fun MoreSettingCard(
 }
 
 @Composable
-private fun ConnectionTestResultBanner(state: ConnectionTestState) {
-    when (state.status) {
-        ConnectionTestStatus.IDLE, ConnectionTestStatus.TESTING -> {}
-        ConnectionTestStatus.SUCCESS -> {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        "连接成功 (${state.latencyMs}ms)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+private fun VibrationDurationField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("毫秒") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+    }
+}
+
+private fun playPreviewVibration(
+    context: android.content.Context,
+    settings: AutomationSettings,
+    text: String
+) {
+    val pattern = mutableListOf<Long>()
+    val amplitudes = mutableListOf<Int>()
+    pattern += 0L
+    amplitudes += 0
+
+    text.uppercase().forEachIndexed { index, ch ->
+        val count = ch.code - 'A'.code + 1
+        if (count <= 0) return@forEachIndexed
+        repeat(count) { pulseIndex ->
+            pattern += 30L
+            amplitudes += VibrationEffect.DEFAULT_AMPLITUDE
+            if (pulseIndex != count - 1) {
+                pattern += settings.staticIntraLetterGapMs.toLong()
+                amplitudes += 0
+            }
+        }
+        if (index != text.lastIndex) {
+            pattern += settings.staticInterLetterGapMs.toLong()
+            amplitudes += 0
+        }
+    }
+
+    runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibrator = context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+            if (vibrator != null && vibrator.hasVibrator()) {
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern.toLongArray(), amplitudes.toIntArray(), -1))
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            val vibrator = context.getSystemService(Service.VIBRATOR_SERVICE) as? Vibrator
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createWaveform(pattern.toLongArray(), amplitudes.toIntArray(), -1))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(pattern.toLongArray(), -1)
                 }
             }
         }
-        ConnectionTestStatus.FAILED -> {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.errorContainer
+    }
+}
+
+@Composable
+private fun ConnectionTestInlineResult(
+    state: ConnectionTestState,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = state.status == ConnectionTestStatus.SUCCESS || state.status == ConnectionTestStatus.FAILED,
+        modifier = modifier,
+        enter = expandHorizontally(expandFrom = Alignment.Start) +
+            slideInHorizontally { -it / 3 } +
+            fadeIn(),
+        exit = shrinkHorizontally(shrinkTowards = Alignment.Start) + fadeOut()
+    ) {
+        val success = state.status == ConnectionTestStatus.SUCCESS
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = if (success) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.errorContainer
+            }
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.ErrorOutline,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "连接失败",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            state.errorMessage,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
+                Icon(
+                    if (success) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
+                    contentDescription = null,
+                    tint = if (success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    if (success) "连接成功 ${state.latencyMs}ms" else "连接失败 ${state.errorMessage}",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (success) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onErrorContainer
                     }
-                }
+                )
             }
         }
     }

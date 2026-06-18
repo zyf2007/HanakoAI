@@ -24,11 +24,13 @@ import `fun`.kirari.hanako.localocr.LocalOcrManager
 import `fun`.kirari.hanako.network.ConnectionTestResult
 import `fun`.kirari.hanako.network.ProviderModelsApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -51,6 +53,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _connectionTestState = MutableStateFlow(ConnectionTestState())
     val connectionTestState: StateFlow<ConnectionTestState> = _connectionTestState.asStateFlow()
+    private var connectionTestJob: Job? = null
 
     val settings: StateFlow<AppSettings> = repository.settings.stateIn(
         scope = viewModelScope,
@@ -253,10 +256,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun testProviderConnection(provider: ModelProviderConfig) {
+        connectionTestJob?.cancel()
         _connectionTestState.value = ConnectionTestState(status = ConnectionTestStatus.TESTING)
-        viewModelScope.launch {
+        connectionTestJob = viewModelScope.launch {
             val trustAll = settings.value.trustAllHttpsCertificates
             val result = providerModelsApi.testConnection(provider, trustAll)
+            if (!isActive) return@launch
             _connectionTestState.value = if (result.success) {
                 ConnectionTestState(
                     status = ConnectionTestStatus.SUCCESS,
@@ -273,6 +278,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun resetConnectionTest() {
+        connectionTestJob?.cancel()
+        connectionTestJob = null
         _connectionTestState.value = ConnectionTestState()
     }
 

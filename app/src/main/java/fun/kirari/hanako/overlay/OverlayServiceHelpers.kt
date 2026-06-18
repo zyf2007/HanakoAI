@@ -14,6 +14,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.NotificationCompat
 import `fun`.kirari.hanako.MainActivity
 import `fun`.kirari.hanako.R
+import `fun`.kirari.hanako.data.AutomationSettings
+import `fun`.kirari.hanako.debug.AppDebugLogStore
+import kotlinx.coroutines.delay
 
 internal fun OverlayService.buildNotification(): Notification {
     val openIntent = PendingIntent.getActivity(
@@ -67,21 +70,65 @@ internal fun openMainActivity(context: android.content.Context) {
 }
 
 internal fun OverlayService.vibrateShort() {
+    vibrateShort(30L)
+}
+
+internal fun OverlayService.vibrateShort(durationMs: Long) {
     runCatching {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = getSystemService(VibratorManager::class.java)
-            vibratorManager?.defaultVibrator?.vibrate(
-                VibrationEffect.createOneShot(30L, VibrationEffect.DEFAULT_AMPLITUDE)
+            val vibrator = vibratorManager?.defaultVibrator
+            if (vibrator == null || !vibrator.hasVibrator()) {
+                AppDebugLogStore.i("HanakoOverlayService", "vibrateShort skipped: no vibrator on device")
+                return
+            }
+            vibrator.vibrate(
+                VibrationEffect.createOneShot(
+                    durationMs,
+                    VibrationEffect.DEFAULT_AMPLITUDE
+                )
             )
         } else {
             @Suppress("DEPRECATION")
             val vibrator = getSystemService(Service.VIBRATOR_SERVICE) as? Vibrator
+            if (vibrator == null || !vibrator.hasVibrator()) {
+                AppDebugLogStore.i("HanakoOverlayService", "vibrateShort skipped: no vibrator on device")
+                return
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createOneShot(30L, VibrationEffect.DEFAULT_AMPLITUDE))
+                vibrator?.vibrate(
+                    VibrationEffect.createOneShot(
+                        durationMs,
+                        VibrationEffect.DEFAULT_AMPLITUDE
+                    )
+                )
             } else {
                 @Suppress("DEPRECATION")
-                vibrator?.vibrate(30L)
+                vibrator?.vibrate(durationMs)
             }
+        }
+        AppDebugLogStore.d("HanakoOverlayService", "vibrateShort triggered")
+    }.onFailure { error ->
+        AppDebugLogStore.e("HanakoOverlayService", "vibrateShort failed", error)
+    }
+}
+
+internal suspend fun OverlayService.vibrateLetters(
+    text: String,
+    settings: AutomationSettings
+) {
+    AppDebugLogStore.i("HanakoOverlayService", "vibrateLetters text=$text")
+    text.uppercase().forEachIndexed { index, ch ->
+        val count = ch.code - 'A'.code + 1
+        if (count <= 0) return@forEachIndexed
+        repeat(count) { pulseIndex ->
+            vibrateShort()
+            if (pulseIndex != count - 1) {
+                delay(settings.staticIntraLetterGapMs.toLong())
+            }
+        }
+        if (index != text.lastIndex) {
+            delay(settings.staticInterLetterGapMs.toLong())
         }
     }
 }

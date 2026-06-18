@@ -15,6 +15,9 @@ data class BubbleAppearance(
     val spinnerColor: Int,
     val showSpinner: Boolean,
     val letters: String?,
+    val showIcon: Boolean = true,
+    val sizeScale: Float = 1f,
+    val animateTransitions: Boolean = true,
     val showCaptureCount: Boolean = false,
     val captureCount: Int = 0
 )
@@ -28,7 +31,25 @@ internal object BubbleRenderer {
     /**
      * 根据状态渲染悬浮球外观
      */
-    fun render(state: BubbleState, launchMode: OverlayLaunchMode, context: Context): BubbleAppearance {
+    fun render(
+        state: BubbleState,
+        launchMode: OverlayLaunchMode,
+        context: Context,
+        staticModeEnabled: Boolean
+    ): BubbleAppearance {
+        if (staticModeEnabled) {
+            return BubbleAppearance(
+                backgroundColor = Color.WHITE,
+                iconTint = Color.WHITE,
+                iconRes = 0,
+                spinnerColor = Color.WHITE,
+                showSpinner = false,
+                letters = null,
+                showIcon = false,
+                sizeScale = 0.5f,
+                animateTransitions = false
+            )
+        }
         return when (state) {
             is BubbleState.Idle -> renderIdle(launchMode, context)
             is BubbleState.Processing -> renderProcessing(context)

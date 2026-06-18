@@ -112,6 +112,7 @@ private const val ROUTE_SETTINGS_MODEL = "settings_model"
 private const val ROUTE_SETTINGS_ASSISTANT = "settings_assistant"
 private const val ROUTE_SETTINGS_ASSISTANT_DETAIL = "settings_assistant_detail"
 private const val ROUTE_SETTINGS_MORE = "settings_more"
+private const val ROUTE_SETTINGS_STATIC_VIBRATION = "settings_static_vibration"
 private const val ROUTE_SETTINGS_DEBUG_LOGS = "settings_debug_logs"
 private const val ARG_PROVIDER_ID = "providerId"
 private const val ARG_ASSISTANT_ID = "assistantId"
@@ -129,6 +130,7 @@ private fun appTitle(route: String?, currentScreen: Screen): String = when (rout
     ROUTE_SETTINGS_MODEL -> "模型设置"
     ROUTE_SETTINGS_ASSISTANT -> "助手配置"
     ROUTE_SETTINGS_MORE -> "更多"
+    ROUTE_SETTINGS_STATIC_VIBRATION -> "静态模式振动"
     ROUTE_SETTINGS_DEBUG_LOGS -> "调试日志"
     null -> currentScreen.title
     else -> when {
@@ -342,7 +344,8 @@ fun HanakoApp(viewModel: MainViewModel) {
                             connectionTestState = connectionTestState,
                             onUpdateProvider = viewModel::updateProvider,
                             onViewModels = { providerModelsPreviewId = provider.id },
-                            onTestConnection = viewModel::testProviderConnection
+                            onTestConnection = viewModel::testProviderConnection,
+                            onClearConnectionTest = viewModel::resetConnectionTest
                         )
                     } else {
                         LaunchedEffect(Unit) { navController.popBackStack() }
@@ -387,6 +390,12 @@ fun HanakoApp(viewModel: MainViewModel) {
                                 it.copy(completionNotificationEnabled = enabled)
                             }
                         },
+                        onToggleStaticMode = { enabled ->
+                            viewModel.updateAutomationSettings {
+                                it.copy(staticModeEnabled = enabled)
+                            }
+                        },
+                        onNavigateStaticVibrationSettings = { navController.navigate(ROUTE_SETTINGS_STATIC_VIBRATION) },
                         onSelectMethod = viewModel::setScreenCaptureMethod,
                         onUpdateTimeoutSeconds = { seconds ->
                             viewModel.updateAutomationSettings {
@@ -394,6 +403,14 @@ fun HanakoApp(viewModel: MainViewModel) {
                             }
                         },
                         onToggleTrustAllHttpsCertificates = viewModel::setTrustAllHttpsCertificates
+                    )
+                }
+                composable(ROUTE_SETTINGS_STATIC_VIBRATION) {
+                    StaticVibrationSettingsScreen(
+                        automationSettings = settings.automation,
+                        onUpdateSettings = { transform ->
+                            viewModel.updateAutomationSettings(transform)
+                        }
                     )
                 }
                 composable(ROUTE_SETTINGS_DEBUG_LOGS) {
@@ -704,6 +721,7 @@ private fun HanakoHomeScreen(
                 overlayEnabled = overlayEnabled,
                 hasOverlayPermission = hasOverlayPermission,
                 captureMethod = settings.screenCaptureMethod,
+                staticModeEnabled = settings.automation.staticModeEnabled,
                 route = settings.processingRoute,
                 onSelectRoute = onSelectRoute,
                 onOpenOverlayPermission = onOpenOverlayPermission,

@@ -68,6 +68,7 @@ internal class OverlayViewModel(
                 launchMode = mode,
                 autoRunState = if (mode == OverlayLaunchMode.NORMAL) AutoRunState.IDLE else state.autoRunState,
                 autoCopiedLabel = if (mode == OverlayLaunchMode.NORMAL) null else state.autoCopiedLabel,
+                pendingVibrationLetters = if (mode == OverlayLaunchMode.NORMAL) null else state.pendingVibrationLetters,
                 error = null
             )
         }
@@ -101,7 +102,8 @@ internal class OverlayViewModel(
                         sheetVisible = true,
                         sheetMode = OverlaySheetMode.CROP,
                         autoRunState = AutoRunState.IDLE,
-                        autoCopiedLabel = null
+                        autoCopiedLabel = null,
+                        pendingVibrationLetters = null
                     )
                 }
                 bubbleStateMachine.forceState(BubbleState.Idle)
@@ -131,7 +133,8 @@ internal class OverlayViewModel(
                     working = true,
                     sheetVisible = false,
                     autoRunState = AutoRunState.RUNNING,
-                    autoCopiedLabel = null
+                    autoCopiedLabel = null,
+                    pendingVibrationLetters = null
                 )
             }
             bubbleStateMachine.dispatch(BubbleEvent.StartProcessing)
@@ -153,6 +156,7 @@ internal class OverlayViewModel(
                     it.copy(
                         working = false,
                         autoRunState = AutoRunState.IDLE,
+                        pendingVibrationLetters = null,
                         error = error.message ?: "截屏失败"
                     )
                 }
@@ -237,7 +241,8 @@ internal class OverlayViewModel(
                         liveOcrText = result.extractedText,
                         liveAnswerText = result.answer,
                         autoRunState = AutoRunState.IDLE,
-                        autoCopiedLabel = null
+                        autoCopiedLabel = null,
+                        pendingVibrationLetters = null
                     )
                 }
                 bubbleStateMachine.forceState(BubbleState.Idle)
@@ -257,13 +262,19 @@ internal class OverlayViewModel(
         AppDebugLogStore.d(tag, "consumeAutoCompletedState state=${_uiState.value.autoRunState} bubble=${currentState::class.simpleName}")
         
         if (_uiState.value.launchMode == OverlayLaunchMode.AUTO && _uiState.value.autoRunState == AutoRunState.COMPLETED) {
-            if (currentState is BubbleState.Copied) {
-                _uiState.update { it.copy(autoRunState = AutoRunState.IDLE) }
+            if (currentState is BubbleState.Copied ||
+                (_uiState.value.settings.automation.staticModeEnabled && currentState is BubbleState.ShowingLetters)
+            ) {
+                _uiState.update { it.copy(autoRunState = AutoRunState.IDLE, pendingVibrationLetters = null) }
                 bubbleStateMachine.forceState(BubbleState.Idle)
             } else {
-                _uiState.update { it.copy(autoRunState = AutoRunState.IDLE) }
+                _uiState.update { it.copy(autoRunState = AutoRunState.IDLE, pendingVibrationLetters = null) }
             }
         }
+    }
+
+    fun consumePendingVibrationLetters() {
+        _uiState.update { it.copy(pendingVibrationLetters = null) }
     }
 
     fun onBubbleTappedAfterLettersShown() {
@@ -559,6 +570,7 @@ internal class OverlayViewModel(
                             liveAnswerText = result.automationThought,
                             autoRunState = AutoRunState.COMPLETED,
                             autoCopiedLabel = action.text,
+                            pendingVibrationLetters = null,
                             error = null
                         )
                     }
@@ -574,6 +586,7 @@ internal class OverlayViewModel(
                             liveAnswerText = result.automationThought,
                             autoRunState = AutoRunState.COMPLETED,
                             autoCopiedLabel = null,
+                            pendingVibrationLetters = action.text,
                             error = null
                         )
                     }
@@ -599,6 +612,7 @@ internal class OverlayViewModel(
                 working = false,
                 autoRunState = AutoRunState.IDLE,
                 autoCopiedLabel = null,
+                pendingVibrationLetters = null,
                 error = null
             )
         }
@@ -628,6 +642,7 @@ internal class OverlayViewModel(
             it.copy(
                 working = false,
                 autoRunState = AutoRunState.IDLE,
+                pendingVibrationLetters = null,
                 error = message
             )
         }
