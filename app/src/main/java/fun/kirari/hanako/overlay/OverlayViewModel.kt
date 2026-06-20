@@ -18,6 +18,7 @@ import `fun`.kirari.hanako.data.ModelSelection
 import `fun`.kirari.hanako.data.SettingsRepository
 import `fun`.kirari.hanako.debug.AppDebugLogStore
 import `fun`.kirari.hanako.localocr.LocalOcrManager
+import `fun`.kirari.hanako.network.ProviderModelsApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,7 +30,8 @@ import kotlinx.coroutines.withTimeout
 internal class OverlayViewModel(
     private val appContext: Context,
     private val repository: SettingsRepository,
-    private val pipeline: ProcessingPipeline
+    private val pipeline: ProcessingPipeline,
+    val providerModelsApi: ProviderModelsApi
 ) : ViewModel() {
     private val tag = "HanakoOverlayVM"
     private val processingTimeoutMillis = 90_000L
@@ -470,7 +472,8 @@ internal class OverlayViewModel(
                     return OverlayViewModel(
                         appContext = appContext,
                         repository = container.settingsRepository,
-                        pipeline = ProcessingPipeline(appContext, container.unifiedLLMClient, container.localOcrManager)
+                        pipeline = ProcessingPipeline(appContext, container.unifiedLLMClient, container.localOcrManager),
+                        providerModelsApi = container.providerModelsApi
                     ) as T
                 }
             }

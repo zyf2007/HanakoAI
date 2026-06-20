@@ -1,6 +1,8 @@
 package `fun`.kirari.auth.core
 
 import android.net.Uri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -51,6 +53,15 @@ data class OidcTokenResponse(
     @SerialName("expires_in") val expiresIn: Long = 0L
 )
 
+@Serializable
+data class OidcUserInfo(
+    val sub: String = "",
+    val email: String? = null,
+    val name: String? = null,
+    @SerialName("preferred_username") val preferredUsername: String? = null,
+    val nickname: String? = null
+)
+
 class OidcPkceClient(
     private val json: Json = Json { ignoreUnknownKeys = true },
     private val secureRandom: SecureRandom = SecureRandom()
@@ -58,7 +69,7 @@ class OidcPkceClient(
     suspend fun fetchDiscovery(
         httpClient: OkHttpClient,
         issuerBaseUrl: String
-    ): OidcDiscoveryDocument {
+    ): OidcDiscoveryDocument = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url("${issuerBaseUrl.trim().trimEnd('/')}/.well-known/openid-configuration")
             .get()
@@ -68,7 +79,7 @@ class OidcPkceClient(
                 error("OIDC discovery failed: HTTP ${response.code}")
             }
             val body = response.body?.string().orEmpty()
-            return json.decodeFromString(OidcDiscoveryDocument.serializer(), body)
+            json.decodeFromString(OidcDiscoveryDocument.serializer(), body)
         }
     }
 
@@ -144,16 +155,41 @@ class OidcPkceClient(
         return executeTokenRequest(httpClient, request)
     }
 
+    suspend fun fetchUserInfo(
+        httpClient: OkHttpClient,
+        config: OidcClientConfig,
+        accessToken: String
+    ): OidcUserInfo {
+        require(accessToken.isNotBlank()) { "OIDC access token is required" }
+        val discovery = fetchDiscovery(httpClient, config.issuerBaseUrl)
+        val endpoint = discovery.userInfoEndpoint ?: error("OIDC userinfo endpoint is not available")
+        val request = Request.Builder()
+            .url(endpoint)
+            .get()
+            .header("Accept", "application/json")
+            .header("Authorization", "Bearer $accessToken")
+            .build()
+        return withContext(Dispatchers.IO) {
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    error("OIDC userinfo failed: HTTP ${response.code} $body")
+                }
+                json.decodeFromString(OidcUserInfo.serializer(), body)
+            }
+        }
+    }
+
     private suspend fun executeTokenRequest(
         httpClient: OkHttpClient,
         request: Request
-    ): OidcTokenResponse {
+    ): OidcTokenResponse = withContext(Dispatchers.IO) {
         httpClient.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 error("OIDC token exchange failed: HTTP ${response.code} $body")
             }
-            return json.decodeFromString(OidcTokenResponse.serializer(), body)
+            json.decodeFromString(OidcTokenResponse.serializer(), body)
         }
     }
 

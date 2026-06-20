@@ -1,17 +1,9 @@
 package `fun`.kirari.hanako.data
 
 import `fun`.kirari.hanako.BuildConfig
+import `fun`.kirari.llm.core.ProviderKind
 import kotlinx.serialization.Serializable
 import java.util.UUID
-
-@Serializable
-enum class ProviderKind {
-    OPENAI_COMPATIBLE,
-    OPENAI_RESPONSES,
-    ANTHROPIC,
-    GOOGLE,
-    KIRARI_NETWORK
-}
 
 @Serializable
 data class ModelProviderConfig(
@@ -47,7 +39,8 @@ const val KIRARI_PROVIDER_ID = "__kirari_network__"
 @Serializable
 data class KirariSettings(
     val serverUrl: String = BuildConfig.KIRARI_SERVER_URL,
-    val auth: KirariAuthState = KirariAuthState()
+    val auth: KirariAuthState = KirariAuthState(),
+    val profile: KirariUserProfile = KirariUserProfile()
 )
 
 @Serializable
@@ -58,6 +51,16 @@ data class KirariAuthState(
     val tokenType: String = "Bearer",
     val scope: String = "",
     val accessTokenExpiresAtMillis: Long = 0L
+)
+
+@Serializable
+data class KirariUserProfile(
+    val subject: String = "",
+    val email: String = "",
+    val name: String = "",
+    val preferredUsername: String = "",
+    val nickname: String = "",
+    val lastSyncedAtMillis: Long = 0L
 )
 
 @Serializable
@@ -87,15 +90,6 @@ val ProviderKind.defaultBaseUrl: String
         ProviderKind.KIRARI_NETWORK -> BuildConfig.KIRARI_SERVER_URL
     }
 
-val ProviderKind.modelsRequestSuffix: String
-    get() = when (this) {
-        ProviderKind.OPENAI_COMPATIBLE -> "/models"
-        ProviderKind.OPENAI_RESPONSES -> "/models"
-        ProviderKind.ANTHROPIC -> "/models"
-        ProviderKind.GOOGLE -> "/models?pageSize=100"
-        ProviderKind.KIRARI_NETWORK -> "/api/llm/meta"
-    }
-
 val ProviderKind.requestPathSuffix: String
     get() = when (this) {
         ProviderKind.OPENAI_COMPATIBLE -> "/chat/completions"
@@ -106,8 +100,6 @@ val ProviderKind.requestPathSuffix: String
     }
 
 fun ModelProviderConfig.requestPreviewUrl(): String = "${baseUrl.trimEnd('/')}${kind.requestPathSuffix}"
-
-fun ModelProviderConfig.modelsRequestUrl(): String = "${baseUrl.trimEnd('/')}${kind.modelsRequestSuffix}"
 
 @Serializable
 data class AssistantPreset(

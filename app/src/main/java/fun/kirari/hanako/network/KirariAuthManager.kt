@@ -5,10 +5,12 @@ import `fun`.kirari.auth.core.AuthorizationSession
 import `fun`.kirari.auth.core.OidcClientConfig
 import `fun`.kirari.auth.core.OidcPkceClient
 import `fun`.kirari.auth.core.OidcTokenResponse
+import `fun`.kirari.auth.core.OidcUserInfo
 import `fun`.kirari.hanako.BuildConfig
 import `fun`.kirari.hanako.data.AppSettings
 import `fun`.kirari.hanako.data.KirariAuthState
 import `fun`.kirari.hanako.data.KirariSettings
+import `fun`.kirari.hanako.data.KirariUserProfile
 import `fun`.kirari.hanako.data.SettingsStore
 import `fun`.kirari.hanako.debug.AppDebugLogStore
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +26,11 @@ internal data class KirariAuthorizationRequest(
 internal data class KirariAuthHandleResult(
     val success: Boolean,
     val message: String
+)
+
+internal data class KirariSessionRefreshResult(
+    val authenticated: Boolean,
+    val errorMessage: String? = null
 )
 
 internal class KirariAuthManager(
@@ -88,7 +95,12 @@ internal class KirariAuthManager(
             code = code
         )
         pendingSession = null
-        persistAuth(tokenResponse, fallbackRefreshToken = settings.kirari.auth.refreshToken)
+        persistSession(
+            tokenResponse = tokenResponse,
+            serverUrl = settings.kirari.serverUrl,
+            trustAllHttpsCertificates = trustAllHttpsCertificates,
+            fallbackRefreshToken = settings.kirari.auth.refreshToken
+        )
         AppDebugLogStore.i(tag, "authorization code exchanged")
         KirariAuthHandleResult(true, "Kirari 登录成功")
     }
@@ -114,16 +126,75 @@ internal class KirariAuthManager(
                 config = oidcConfig(settings.kirari.serverUrl),
                 refreshToken = latest.refreshToken
             )
-            persistAuth(refreshed, fallbackRefreshToken = latest.refreshToken)
+            persistSession(
+                tokenResponse = refreshed,
+                serverUrl = settings.kirari.serverUrl,
+                trustAllHttpsCertificates = trustAllHttpsCertificates,
+                fallbackRefreshToken = latest.refreshToken
+            )
             AppDebugLogStore.i(tag, "access token refreshed")
             refreshed.accessToken
+        }
+    }
+
+    suspend fun refreshSessionStatus(
+        settings: AppSettings,
+        trustAllHttpsCertificates: Boolean
+    ): KirariSessionRefreshResult = withContext(Dispatchers.IO) {
+        val auth = settings.kirari.auth
+        if (auth.accessToken.isBlank() && auth.refreshToken.isBlank()) {
+            clearAuth()
+            return@withContext KirariSessionRefreshResult(authenticated = false)
+        }
+        return@withContext runCatching {
+            val accessToken = ensureValidAccessToken(settingsStore.read(), trustAllHttpsCertificates)
+            if (accessToken.isBlank()) {
+                clearAuth()
+                KirariSessionRefreshResult(
+                    authenticated = false,
+                    errorMessage = "登录已失效，请重新登录"
+                )
+            } else {
+                val latest = settingsStore.read()
+                val profile = fetchUserProfile(
+                    serverUrl = latest.kirari.serverUrl,
+                    accessToken = accessToken,
+                    trustAllHttpsCertificates = trustAllHttpsCertificates
+                )
+                settingsStore.update { current ->
+                    current.copy(
+                        kirari = current.kirari.copy(profile = profile)
+                    )
+                }
+                KirariSessionRefreshResult(authenticated = true)
+            }
+        }.getOrElse { error ->
+            AppDebugLogStore.e(tag, "refresh session status failed", error)
+            val message = error.message ?: "刷新登录状态失败"
+            if (message.contains("401") || message.contains("400") || message.contains("invalid", ignoreCase = true)) {
+                clearAuth()
+                KirariSessionRefreshResult(
+                    authenticated = false,
+                    errorMessage = "登录已失效，请重新登录"
+                )
+            } else {
+                KirariSessionRefreshResult(
+                    authenticated = false,
+                    errorMessage = message
+                )
+            }
         }
     }
 
     suspend fun clearAuth() {
         pendingSession = null
         settingsStore.update { current ->
-            current.copy(kirari = current.kirari.copy(auth = KirariAuthState()))
+            current.copy(
+                kirari = current.kirari.copy(
+                    auth = KirariAuthState(),
+                    profile = KirariUserProfile()
+                )
+            )
         }
     }
 
@@ -145,14 +216,24 @@ internal class KirariAuthManager(
         )
     }
 
-    private suspend fun persistAuth(
+    private suspend fun persistSession(
         tokenResponse: OidcTokenResponse,
+        serverUrl: String,
+        trustAllHttpsCertificates: Boolean,
         fallbackRefreshToken: String
     ) {
         val auth = tokenResponse.toAuthState(fallbackRefreshToken)
+        val profile = fetchUserProfile(
+            serverUrl = serverUrl,
+            accessToken = auth.accessToken,
+            trustAllHttpsCertificates = trustAllHttpsCertificates
+        )
         settingsStore.update { current ->
             current.copy(
-                kirari = current.kirari.copy(auth = auth)
+                kirari = current.kirari.copy(
+                    auth = auth,
+                    profile = profile
+                )
             )
         }
     }
@@ -168,6 +249,28 @@ internal class KirariAuthManager(
             accessTokenExpiresAtMillis = expiresAt
         )
     }
+
+    private suspend fun fetchUserProfile(
+        serverUrl: String,
+        accessToken: String,
+        trustAllHttpsCertificates: Boolean
+    ): KirariUserProfile {
+        val userInfo = oidcClient.fetchUserInfo(
+            httpClient = clientProvider.client(trustAllHttpsCertificates),
+            config = oidcConfig(serverUrl),
+            accessToken = accessToken
+        )
+        return userInfo.toProfile()
+    }
+
+    private fun OidcUserInfo.toProfile(): KirariUserProfile = KirariUserProfile(
+        subject = sub,
+        email = email.orEmpty(),
+        name = name.orEmpty(),
+        preferredUsername = preferredUsername.orEmpty(),
+        nickname = nickname.orEmpty(),
+        lastSyncedAtMillis = System.currentTimeMillis()
+    )
 
     private fun redirectUri(): String = "${BuildConfig.APPLICATION_ID}:/oauth2redirect/kirari"
 }

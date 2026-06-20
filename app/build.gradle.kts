@@ -163,6 +163,7 @@ android {
 
 dependencies {
     implementation(project(":kirari-auth-core"))
+    implementation(project(":kirari-llm-core"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
@@ -180,7 +181,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.foundation)
-    implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
     implementation(libs.jetbrains.markdown)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.play.services)

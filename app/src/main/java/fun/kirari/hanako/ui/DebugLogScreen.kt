@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -88,7 +88,10 @@ fun DebugLogScreen(
                 }
             }
         } else {
-            items(entries.reversed(), key = { "${it.timestamp}-${it.tag}-${it.message.hashCode()}" }) { entry ->
+            itemsIndexed(
+                items = entries.reversed(),
+                key = { index, entry -> "${entry.timestamp}-${entry.tag}-${entry.message.hashCode()}-$index" }
+            ) { _, entry ->
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerLow

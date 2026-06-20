@@ -1,9 +1,4 @@
 package `fun`.kirari.hanako.network
 
-import kotlinx.serialization.json.JsonObject
-
-internal sealed class LlmEvent {
-    data class TextDelta(val text: String) : LlmEvent()
-    data class ToolCall(val name: String, val arguments: JsonObject) : LlmEvent()
-    data object Done : LlmEvent()
-}
+@Deprecated("Use fun.kirari.llm.core.LlmEvent directly")
+internal typealias LlmEvent = `fun`.kirari.llm.core.LlmEvent

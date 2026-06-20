@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "fun.kirari.auth.core"
+    namespace = "fun.kirari.llm.core"
     compileSdk {
         version = release(36)
     }
@@ -32,4 +32,5 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
+    implementation(libs.okhttp.sse)
 }

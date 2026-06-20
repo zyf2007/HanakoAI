@@ -35,14 +35,16 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import `fun`.kirari.hanako.data.ModelProviderConfig
 import `fun`.kirari.hanako.network.ProviderModelsApi
-import `fun`.kirari.hanako.network.RemoteModelOption
+import `fun`.kirari.llm.core.ProviderCatalog
+import `fun`.kirari.llm.core.RemoteModelOption
 import kotlinx.coroutines.CancellationException
 
 data class ModelPickerEntry(
     val id: String,
     val displayName: String = id,
     val isFavorite: Boolean = false,
-    val isLocalOnly: Boolean = false
+    val isLocalOnly: Boolean = false,
+    val priceLabel: String? = null
 )
 
 @Composable
@@ -58,14 +60,14 @@ internal fun rememberModelPickerState(
     val locallyRemovedFavorites = remember(provider.id) { mutableStateListOf<String>() }
     var requestCancelled by remember(provider.id) { mutableStateOf(false) }
 
-    val networkModels by produceState<List<RemoteModelOption>?>(initialValue = null, provider.id, requestCancelled, trustAllHttpsCertificates) {
+    val catalog by produceState<ProviderCatalog?>(initialValue = null, provider.id, requestCancelled, trustAllHttpsCertificates) {
         if (!requestCancelled) {
             try {
-                value = api.listModels(provider, trustAllHttpsCertificates)
+                value = api.getCatalog(provider, trustAllHttpsCertificates)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                value = emptyList()
+                value = ProviderCatalog(models = emptyList())
             }
         } else {
             value = null
@@ -78,15 +80,15 @@ internal fun rememberModelPickerState(
         }
     }
 
-    val entries = remember(sessionFavoriteOrder, visibleFavoriteModels, networkModels, requestCancelled) {
+    val entries = remember(sessionFavoriteOrder, visibleFavoriteModels, catalog, requestCancelled) {
         mergeModelEntries(
             sessionFavoriteOrder = sessionFavoriteOrder,
             visibleFavoriteModels = visibleFavoriteModels,
-            networkModels = networkModels
+            networkModels = catalog?.models
         )
     }
 
-    val hasNetworkResponse = networkModels != null || requestCancelled
+    val hasNetworkResponse = catalog != null || requestCancelled
 
     return remember(
         provider.id,
@@ -315,6 +317,15 @@ private fun ModelPickerEntryContent(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            model.priceLabel?.let { price ->
+                Text(
+                    text = price,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         if (model.isFavorite) {
             Icon(
@@ -356,7 +367,8 @@ private fun mergeModelEntries(
                 id = favorite,
                 displayName = favorite,
                 isFavorite = true,
-                isLocalOnly = true
+                isLocalOnly = true,
+                priceLabel = null
             )
         }
     }
@@ -368,14 +380,16 @@ private fun mergeModelEntries(
                 id = model.id,
                 displayName = model.displayName,
                 isFavorite = visibleFavoriteSet.contains(key),
-                isLocalOnly = false
+                isLocalOnly = false,
+                priceLabel = model.pricePerTokenCredits?.let { "价格: ${it.formatCompactPrice()} credits/token" }
             )
         } else if (visibleFavoriteSet.contains(key)) {
             val index = result.indexOfFirst { it.id.equals(model.id, ignoreCase = true) }
             if (index >= 0) {
                 result[index] = result[index].copy(
                     displayName = model.displayName,
-                    isFavorite = true
+                    isFavorite = true,
+                    priceLabel = model.pricePerTokenCredits?.let { "价格: ${it.formatCompactPrice()} credits/token" }
                 )
             }
         }
@@ -388,4 +402,13 @@ private fun List<String>.normalizedModelNames(): List<String> {
     return map(String::trim)
         .filter(String::isNotBlank)
         .distinctBy { it.lowercase() }
+}
+
+private fun Double.formatCompactPrice(): String {
+    val whole = toLong()
+    return if (toDouble() == whole.toDouble()) {
+        whole.toString()
+    } else {
+        String.format(java.util.Locale.US, "%.4f", this).trimEnd('0').trimEnd('.')
+    }
 }

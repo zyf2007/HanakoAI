@@ -1,6 +1,5 @@
-package `fun`.kirari.hanako.network
+package `fun`.kirari.llm.core
 
-import `fun`.kirari.hanako.debug.AppDebugLogStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,12 +18,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-internal class SseStreamClient(
-    private val client: OkHttpClient
+class SseStreamClient(
+    private val client: OkHttpClient,
+    private val logger: LlmLogger = NoopLlmLogger
 ) {
-    private val tag = "HanakoSseClient"
+    private val tag = "KirariLlmSse"
 
-    internal data class StreamEventResult(
+    data class StreamEventResult(
         val delta: String? = null,
         val done: Boolean = false
     )
@@ -53,7 +53,7 @@ internal class SseStreamClient(
 
             val listener = object : EventSourceListener() {
                 override fun onOpen(eventSource: EventSource, response: Response) {
-                    AppDebugLogStore.i(tag, "stream opened code=${response.code} url=${request.url}")
+                    logger.i(tag, "stream opened code=${response.code} url=${request.url}")
                 }
 
                 override fun onEvent(
@@ -65,7 +65,7 @@ internal class SseStreamClient(
                     try {
                         eventCount += 1
                         if (eventCount <= 5 || eventCount % 25 == 0) {
-                            AppDebugLogStore.d(tag, "stream event#$eventCount type=$type id=$id dataLength=${data.length}")
+                            logger.d(tag, "stream event#$eventCount type=$type id=$id dataLength=${data.length}")
                         }
                         val result = onEvent(eventSource, type, id, data)
                         val delta = result?.delta
@@ -76,7 +76,7 @@ internal class SseStreamClient(
                             onDelta(delta)
                         }
                         if (result?.done == true) {
-                            AppDebugLogStore.i(tag, "stream completed by protocol signal totalEvents=$eventCount outputLength=${builder.length} url=${request.url}")
+                            logger.i(tag, "stream completed by protocol signal totalEvents=$eventCount outputLength=${builder.length} url=${request.url}")
                             finish { cont.resume(builder.toString()) }
                         }
                     } catch (t: Throwable) {
@@ -85,7 +85,7 @@ internal class SseStreamClient(
                 }
 
                 override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                    AppDebugLogStore.e(tag, "stream failure code=${response?.code} url=${request.url}", t)
+                    logger.e(tag, "stream failure code=${response?.code} url=${request.url}", t)
                     response?.close()
                     val normalized = if (
                         !firstDeltaReceived.get() &&
@@ -105,7 +105,7 @@ internal class SseStreamClient(
                 }
 
                 override fun onClosed(eventSource: EventSource) {
-                    AppDebugLogStore.i(tag, "stream closed totalEvents=$eventCount outputLength=${builder.length} url=${request.url}")
+                    logger.i(tag, "stream closed totalEvents=$eventCount outputLength=${builder.length} url=${request.url}")
                     finish { cont.resume(builder.toString()) }
                 }
             }
@@ -115,7 +115,7 @@ internal class SseStreamClient(
             val timeoutJob = CoroutineScope(cont.context).launch {
                 delay(firstDeltaTimeoutMillis)
                 if (!firstDeltaReceived.get()) {
-                    AppDebugLogStore.e(
+                    logger.e(
                         tag,
                         "stream first delta timeout after ${firstDeltaTimeoutMillis}ms url=${request.url}",
                         null

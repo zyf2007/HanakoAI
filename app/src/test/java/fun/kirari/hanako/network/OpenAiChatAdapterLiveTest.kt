@@ -1,7 +1,8 @@
 package `fun`.kirari.hanako.network
 
 import `fun`.kirari.hanako.data.ModelProviderConfig
-import `fun`.kirari.hanako.data.ProviderKind
+import `fun`.kirari.llm.core.LlmEvent
+import `fun`.kirari.llm.core.ProviderKind
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.runBlocking
 import org.junit.Assume.assumeTrue

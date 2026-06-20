@@ -19,10 +19,10 @@ import `fun`.kirari.hanako.data.resolveModelProvider
 import `fun`.kirari.hanako.data.saveToHistoryFile
 import `fun`.kirari.hanako.debug.AppDebugLogStore
 import `fun`.kirari.hanako.localocr.LocalOcrManager
-import `fun`.kirari.hanako.network.LlmEvent
 import `fun`.kirari.hanako.network.ToolDef
 import `fun`.kirari.hanako.network.ToolRegistry
 import `fun`.kirari.hanako.network.UnifiedLLMClient
+import `fun`.kirari.llm.core.LlmEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject

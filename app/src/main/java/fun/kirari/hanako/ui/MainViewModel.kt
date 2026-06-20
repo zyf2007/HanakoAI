@@ -26,9 +26,9 @@ import `fun`.kirari.hanako.data.KIRARI_PROVIDER_ID
 import `fun`.kirari.hanako.data.KirariSettings
 import `fun`.kirari.hanako.data.availableProviders
 import `fun`.kirari.hanako.localocr.LocalOcrManager
-import `fun`.kirari.hanako.network.ConnectionTestResult
 import `fun`.kirari.hanako.network.ProviderModelsApi
 import `fun`.kirari.hanako.network.KirariAuthHandleResult
+import `fun`.kirari.llm.core.ProviderUsageSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +51,23 @@ data class ConnectionTestState(
     val errorMessage: String = ""
 )
 
+data class ProviderMetaState(
+    val loading: Boolean = false,
+    val usageSummary: ProviderUsageSummary? = null,
+    val errorMessage: String? = null
+)
+
+data class KirariAccountState(
+    val displayName: String? = null,
+    val email: String? = null,
+    val subject: String? = null,
+    val loggedIn: Boolean = false,
+    val canRefresh: Boolean = false,
+    val expiresAtMillis: Long = 0L,
+    val loading: Boolean = false,
+    val errorMessage: String? = null
+)
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val container = (application as HanakoApplication).container
     private val repository: SettingsRepository = container.settingsRepository
@@ -63,6 +80,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var connectionTestJob: Job? = null
     private val _kirariAuthMessage = MutableStateFlow<String?>(null)
     val kirariAuthMessage: StateFlow<String?> = _kirariAuthMessage.asStateFlow()
+    private val _providerMetaState = MutableStateFlow(ProviderMetaState())
+    val providerMetaState: StateFlow<ProviderMetaState> = _providerMetaState.asStateFlow()
+    private var providerMetaJob: Job? = null
+    private val _kirariAccountState = MutableStateFlow(KirariAccountState())
+    val kirariAccountState: StateFlow<KirariAccountState> = _kirariAccountState.asStateFlow()
+    private var kirariAccountJob: Job? = null
 
     val settings: StateFlow<AppSettings> = repository.settings.stateIn(
         scope = viewModelScope,
@@ -72,6 +95,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         syncLocalOcrInstallation()
+        syncKirariSessionStatus()
     }
 
     fun updateProvider(provider: ModelProviderConfig) {
@@ -257,6 +281,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 onReady(request.authorizationUrl)
             }.onFailure { error ->
                 _kirariAuthMessage.value = error.message ?: "Kirari 登录准备失败"
+                updateKirariAccountState()
             }
         }
     }
@@ -277,12 +302,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             _kirariAuthMessage.value = result.message
+            syncKirariSessionStatus(force = true)
         }
     }
 
     fun logoutKirari() {
         viewModelScope.launch {
             kirariAuthManager.clearAuth()
+            updateKirariAccountState()
             _kirariAuthMessage.value = "已退出 The Kirari Network"
         }
     }
@@ -347,11 +374,119 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _connectionTestState.value = ConnectionTestState()
     }
 
+    fun loadProviderMeta(provider: ModelProviderConfig) {
+        providerMetaJob?.cancel()
+        val kirariAuth = settings.value.kirari.auth
+        if (
+            provider.id == KIRARI_PROVIDER_ID &&
+            kirariAuth.accessToken.isBlank() &&
+            kirariAuth.refreshToken.isBlank()
+        ) {
+            _providerMetaState.value = ProviderMetaState()
+            return
+        }
+        _providerMetaState.value = ProviderMetaState(loading = true)
+        providerMetaJob = viewModelScope.launch {
+            val trustAll = settings.value.trustAllHttpsCertificates
+            if (provider.id == KIRARI_PROVIDER_ID) {
+                syncKirariSessionStatus(force = true)
+            }
+            val result = runCatching {
+                providerModelsApi.getCatalog(provider, trustAll)
+            }
+            if (!isActive) return@launch
+            _providerMetaState.value = result.fold(
+                onSuccess = { catalog ->
+                    ProviderMetaState(
+                        loading = false,
+                        usageSummary = catalog.usageSummary
+                    )
+                },
+                onFailure = { error ->
+                    if (provider.id == KIRARI_PROVIDER_ID) {
+                        syncKirariSessionStatus(force = true)
+                    }
+                    ProviderMetaState(
+                        loading = false,
+                        errorMessage = error.message ?: "加载提供方信息失败"
+                    )
+                }
+            )
+        }
+    }
+
+    fun resetProviderMeta() {
+        providerMetaJob?.cancel()
+        providerMetaJob = null
+        _providerMetaState.value = ProviderMetaState()
+    }
+
     fun clearDebugLogs() {
         AppDebugLogStore.clear()
     }
 
     fun hasKirariClientId(): Boolean = BuildConfig.KIRARI_OIDC_CLIENT_ID.isNotBlank()
+
+    fun syncKirariSessionStatus(force: Boolean = false) {
+        kirariAccountJob?.cancel()
+        val current = settings.value.kirari
+        if (!force && current.auth.accessToken.isBlank() && current.auth.refreshToken.isBlank()) {
+            updateKirariAccountState()
+            return
+        }
+        _kirariAccountState.value = current.toKirariAccountState(
+            loading = true,
+            errorMessage = null
+        )
+        kirariAccountJob = viewModelScope.launch {
+            val result = kirariAuthManager.refreshSessionStatus(
+                settings = settings.value,
+                trustAllHttpsCertificates = settings.value.trustAllHttpsCertificates
+            )
+            if (!isActive) return@launch
+            if (result.authenticated) {
+                updateKirariAccountState(errorMessage = null)
+            } else {
+                _kirariAccountState.value = settings.value.kirari.toKirariAccountState(
+                    loading = false,
+                    errorMessage = result.errorMessage
+                )
+            }
+        }
+    }
+
+    private fun updateKirariAccountState(
+        loading: Boolean = false,
+        errorMessage: String? = null
+    ) {
+        _kirariAccountState.value = settings.value.kirari.toKirariAccountState(
+            loading = loading,
+            errorMessage = errorMessage
+        )
+    }
+
+    private fun KirariSettings.toKirariAccountState(
+        loading: Boolean = false,
+        errorMessage: String? = null
+    ): KirariAccountState {
+        val auth = auth
+        val profile = profile
+        val now = System.currentTimeMillis()
+        return KirariAccountState(
+            displayName = profile.name.ifBlank {
+                profile.preferredUsername.ifBlank {
+                    profile.nickname.ifBlank { null }
+                }
+            },
+            email = profile.email.ifBlank { null },
+            subject = profile.subject.ifBlank { null },
+            loggedIn = auth.accessToken.isNotBlank() && auth.accessTokenExpiresAtMillis > now,
+            canRefresh = auth.refreshToken.isNotBlank(),
+            expiresAtMillis = auth.accessTokenExpiresAtMillis,
+            loading = loading,
+            errorMessage = errorMessage
+        )
+    }
 
     private fun remapSelection(
         selection: ModelSelection,

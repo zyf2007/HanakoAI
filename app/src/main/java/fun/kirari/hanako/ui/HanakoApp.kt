@@ -257,9 +257,14 @@ fun HanakoApp(viewModel: MainViewModel) {
                     val provider = settings.availableProviders().firstOrNull { it.id == providerId }
                     if (provider != null) {
                         val connectionTestState by viewModel.connectionTestState.collectAsState()
+                        val providerMetaState by viewModel.providerMetaState.collectAsState()
+                        val kirariAccountState by viewModel.kirariAccountState.collectAsState()
                         ProviderDetailScreen(
                             provider = provider,
                             connectionTestState = connectionTestState,
+                            providerMetaState = providerMetaState,
+                            kirariAccountState = kirariAccountState,
+                            hasKirariClientId = viewModel.hasKirariClientId(),
                             onUpdateProvider = viewModel::updateProvider,
                             onViewModels = {
                                 modelSelectionDialogState = modelSelectionDialogState.copy(
@@ -267,7 +272,17 @@ fun HanakoApp(viewModel: MainViewModel) {
                                 )
                             },
                             onTestConnection = viewModel::testProviderConnection,
-                            onClearConnectionTest = viewModel::resetConnectionTest
+                            onClearConnectionTest = viewModel::resetConnectionTest,
+                            onLoadProviderMeta = viewModel::loadProviderMeta,
+                            onClearProviderMeta = viewModel::resetProviderMeta,
+                            onLoginKirari = {
+                                viewModel.startKirariLogin { authorizationUrl ->
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(authorizationUrl))
+                                    )
+                                }
+                            },
+                            onLogoutKirari = viewModel::logoutKirari
                         )
                     } else {
                         LaunchedEffect(Unit) { navController.popBackStack() }

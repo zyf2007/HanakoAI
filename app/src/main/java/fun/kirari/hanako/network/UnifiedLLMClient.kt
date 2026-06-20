@@ -1,9 +1,14 @@
 package `fun`.kirari.hanako.network
 
 import `fun`.kirari.hanako.data.ModelProviderConfig
-import `fun`.kirari.hanako.data.ProviderKind
 import `fun`.kirari.hanako.data.SettingsStore
 import `fun`.kirari.hanako.debug.AppDebugLogStore
+import `fun`.kirari.llm.core.LlmClient
+import `fun`.kirari.llm.core.LlmEvent
+import `fun`.kirari.llm.core.ProviderConfig
+import `fun`.kirari.llm.core.ProviderKind
+import `fun`.kirari.llm.core.StreamRequest
+import `fun`.kirari.llm.core.ToolDef
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.Json
 
@@ -14,6 +19,7 @@ internal class UnifiedLLMClient(
     private val json: Json = Json { ignoreUnknownKeys = true }
 ) {
     private val tag = "HanakoUnifiedLLM"
+    private val coreClient = LlmClient(clientProvider)
 
     suspend fun stream(
         provider: ModelProviderConfig,
@@ -26,22 +32,29 @@ internal class UnifiedLLMClient(
         trustAllHttpsCertificates: Boolean = false
     ): Flow<LlmEvent> {
         AppDebugLogStore.i(tag, "stream provider=${provider.kind} model=$model imageCount=${imagesBase64.size} hasTools=${tools != null} trustAllHttps=$trustAllHttpsCertificates")
-        val sseClient = SseStreamClient(clientProvider.client(trustAllHttpsCertificates))
-        val adapter = when (provider.kind) {
-            ProviderKind.OPENAI_COMPATIBLE -> OpenAiChatAdapter(sseClient, json)
-            ProviderKind.OPENAI_RESPONSES -> OpenAiResponsesAdapter(sseClient, json)
-            ProviderKind.ANTHROPIC -> AnthropicAdapter(sseClient, json)
-            ProviderKind.GOOGLE -> GoogleAdapter(sseClient, json)
-            ProviderKind.KIRARI_NETWORK -> KirariChatAdapter(
-                clientProvider = clientProvider,
-                kirariAuthManager = requireNotNull(kirariAuthManager) { "KirariAuthManager is required for Kirari provider" },
-                settingsStore = requireNotNull(settingsStore) { "SettingsStore is required for Kirari provider" },
-                json = json
-            )
+        val resolvedProvider = when (provider.kind) {
+            ProviderKind.KIRARI_NETWORK -> {
+                val manager = requireNotNull(kirariAuthManager) { "KirariAuthManager is required for Kirari provider" }
+                val store = requireNotNull(settingsStore) { "SettingsStore is required for Kirari provider" }
+                val settings = store.read()
+                val accessToken = manager.ensureValidAccessToken(
+                    settings = settings,
+                    trustAllHttpsCertificates = trustAllHttpsCertificates
+                )
+                require(accessToken.isNotBlank()) { "请先登录 The Kirari Network" }
+                ProviderConfig(
+                    kind = ProviderKind.KIRARI_NETWORK,
+                    baseUrl = provider.baseUrl.trimEnd('/') + "/api/llm",
+                    apiKey = accessToken,
+                    headers = mapOf("Accept" to "application/json, text/event-stream")
+                )
+            }
+            else -> provider.toCoreProvider()
         }
-        return adapter.stream(
+
+        return coreClient.stream(
             StreamRequest(
-                provider = provider,
+                provider = resolvedProvider,
                 model = model,
                 systemPrompt = systemPrompt,
                 userPrompt = userPrompt,
@@ -50,6 +63,14 @@ internal class UnifiedLLMClient(
                 firstDeltaTimeoutMillis = firstDeltaTimeoutMillis,
                 trustAllHttpsCertificates = trustAllHttpsCertificates
             )
+        )
+    }
+
+    private fun ModelProviderConfig.toCoreProvider(): ProviderConfig {
+        return ProviderConfig(
+            kind = kind,
+            baseUrl = baseUrl,
+            apiKey = apiKey
         )
     }
 }

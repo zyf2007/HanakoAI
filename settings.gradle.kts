@@ -23,4 +23,5 @@ dependencyResolutionManagement {
 rootProject.name = "Hanako"
 include(":app")
 include(":kirari-auth-core")
+include(":kirari-llm-core")
  

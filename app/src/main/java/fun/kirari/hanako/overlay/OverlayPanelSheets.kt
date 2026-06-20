@@ -79,6 +79,7 @@ import `fun`.kirari.hanako.data.ProcessingRoute
 import `fun`.kirari.hanako.data.displayName
 import `fun`.kirari.hanako.data.resolveModelName
 import `fun`.kirari.hanako.data.resolveModelProvider
+import `fun`.kirari.hanako.network.ProviderModelsApi
 import `fun`.kirari.hanako.ui.components.ModelPickerListContent
 import `fun`.kirari.hanako.ui.components.ModelPickerSurfaceItem
 import `fun`.kirari.hanako.ui.components.rememberModelPickerState
@@ -99,7 +100,8 @@ internal fun CropOverlaySheet(
     onSelectNextAssistant: () -> Unit,
     onUpdateModelSelection: (ModelPurpose, ModelSelection, Boolean) -> Unit,
     onToggleFavoriteModel: (String, String) -> Unit,
-    onToggleProcessingRoute: () -> Unit
+    onToggleProcessingRoute: () -> Unit,
+    providerModelsApi: ProviderModelsApi
 ) {
     val bitmap = uiState.screenshot
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
@@ -357,6 +359,7 @@ internal fun CropOverlaySheet(
             provider = pickerProvider,
             closing = modelPickerClosing,
             title = title,
+            api = providerModelsApi,
             onDismiss = {
                 modelPickerClosing = true
             },

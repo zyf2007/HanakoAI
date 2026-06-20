@@ -1,6 +1,7 @@
 package `fun`.kirari.hanako.data
 
 import android.util.Base64
+import `fun`.kirari.llm.core.ProviderKind
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject

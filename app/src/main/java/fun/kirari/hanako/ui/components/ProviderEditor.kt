@@ -44,10 +44,10 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.data.ModelProviderConfig
-import `fun`.kirari.hanako.data.ProviderKind
 import `fun`.kirari.hanako.data.displayName
 import `fun`.kirari.hanako.data.parseImportedProviderConfig
 import `fun`.kirari.hanako.data.requestPreviewUrl
+import `fun`.kirari.llm.core.ProviderKind
 import kotlinx.coroutines.delay
 
 @Composable

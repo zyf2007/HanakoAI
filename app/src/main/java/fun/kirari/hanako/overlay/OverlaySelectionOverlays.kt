@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.data.ModelProviderConfig
 import `fun`.kirari.hanako.data.displayName
+import `fun`.kirari.hanako.network.ProviderModelsApi
 import `fun`.kirari.hanako.ui.components.ModelPickerListContent
 import `fun`.kirari.hanako.ui.components.ModelPickerSurfaceItem
 import `fun`.kirari.hanako.ui.components.rememberModelPickerState
@@ -133,13 +134,14 @@ internal fun ModelPickerOverlay(
     provider: ModelProviderConfig,
     closing: Boolean,
     title: String,
+    api: ProviderModelsApi,
     onDismiss: () -> Unit,
     onDismissFinished: () -> Unit,
     onPick: (String, Boolean) -> Unit,
     onToggleFavorite: (String, Boolean) -> Unit,
     onCustomModelRequest: (String) -> Unit
 ) {
-    val pickerState = rememberModelPickerState(provider = provider)
+    val pickerState = rememberModelPickerState(provider = provider, api = api)
     OverlaySelectionShell(
         title = title,
         closing = closing,
