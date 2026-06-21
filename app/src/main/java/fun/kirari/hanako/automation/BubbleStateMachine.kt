@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 class BubbleStateMachine {
     private val tag = "BubbleStateMachine"
-    
+
     private val _state = MutableStateFlow<BubbleState>(BubbleState.Idle)
     val state: StateFlow<BubbleState> = _state.asStateFlow()
 
@@ -28,10 +28,10 @@ class BubbleStateMachine {
     fun dispatch(event: BubbleEvent) {
         val currentState = _state.value
         val newState = transition(currentState, event)
-        
+
         if (currentState != newState) {
             AppDebugLogStore.i(
-                tag, 
+                tag,
                 "State transition: ${currentState::class.simpleName} -> ${newState::class.simpleName} (event: ${event::class.simpleName})"
             )
             _state.value = newState
@@ -53,86 +53,128 @@ class BubbleStateMachine {
     private fun transition(current: BubbleState, event: BubbleEvent): BubbleState {
         return when {
             // Idle 状态的转换
-            current is BubbleState.Idle && event is BubbleEvent.StartProcessing -> 
+            current is BubbleState.Idle && event is BubbleEvent.StartProcessing ->
                 BubbleState.Processing
-            
-            current is BubbleState.Idle && event is BubbleEvent.LongPress -> 
+
+            current is BubbleState.Idle && event is BubbleEvent.LongPress ->
+                BubbleState.MenuExpanded(BubbleState.Idle, event.anchorX, event.anchorY)
+
+            current is BubbleState.Idle && event is BubbleEvent.EnterMultiPageCapture ->
                 BubbleState.MultiPageCapture()
 
-            // ShowingLetters 状态的转换（行为与 Idle 一致）
-            current is BubbleState.ShowingLetters && event is BubbleEvent.StartProcessing -> 
+            // ShowingLetters 状态的转换
+            current is BubbleState.ShowingLetters && event is BubbleEvent.StartProcessing ->
                 BubbleState.Processing
-            
-            current is BubbleState.ShowingLetters && event is BubbleEvent.LongPress -> 
+
+            current is BubbleState.ShowingLetters && event is BubbleEvent.LongPress ->
+                BubbleState.MenuExpanded(current, event.anchorX, event.anchorY)
+
+            current is BubbleState.ShowingLetters && event is BubbleEvent.EnterMultiPageCapture ->
                 BubbleState.MultiPageCapture()
+
+            current is BubbleState.ShowingLetters && event is BubbleEvent.Reset ->
+                BubbleState.Idle
 
             // Processing 状态的转换
-            current is BubbleState.Processing && event is BubbleEvent.CopyComplete -> 
+            current is BubbleState.Processing && event is BubbleEvent.CopyComplete ->
                 BubbleState.Copied(event.label)
-            
-            current is BubbleState.Processing && event is BubbleEvent.LettersComplete -> 
+
+            current is BubbleState.Processing && event is BubbleEvent.LettersComplete ->
                 BubbleState.ShowingLetters(event.letters)
-            
-            current is BubbleState.Processing && event is BubbleEvent.Timeout -> 
+
+            current is BubbleState.Processing && event is BubbleEvent.Timeout ->
                 BubbleState.Idle
-            
-            current is BubbleState.Processing && event is BubbleEvent.CancelProcessing -> 
+
+            current is BubbleState.Processing && event is BubbleEvent.CancelProcessing ->
                 BubbleState.Idle
+
+            // Processing 长按 -> 弹菜单
+            current is BubbleState.Processing && event is BubbleEvent.LongPress ->
+                BubbleState.MenuExpanded(current, event.anchorX, event.anchorY)
+
+            // Processing 出错 -> Error 状态
+            current is BubbleState.Processing && event is BubbleEvent.ErrorOccurred ->
+                BubbleState.Error(event.message)
 
             // Copied 状态的转换
-            current is BubbleState.Copied && event is BubbleEvent.SingleTap -> 
-                BubbleState.Idle
-            
-            current is BubbleState.Copied && event is BubbleEvent.Reset -> 
+            current is BubbleState.Copied && event is BubbleEvent.SingleTap ->
                 BubbleState.Idle
 
-            // ShowingLetters 状态的转换（行为与 Idle 一致）
-            current is BubbleState.ShowingLetters && event is BubbleEvent.LongPress -> 
-                BubbleState.MultiPageCapture()
-            
-            current is BubbleState.ShowingLetters && event is BubbleEvent.Reset -> 
+            current is BubbleState.Copied && event is BubbleEvent.Reset ->
                 BubbleState.Idle
+
+            current is BubbleState.Copied && event is BubbleEvent.LongPress ->
+                BubbleState.MenuExpanded(current, event.anchorX, event.anchorY)
+
+            current is BubbleState.Copied && event is BubbleEvent.EnterMultiPageCapture ->
+                BubbleState.MultiPageCapture()
 
             // MultiPageCapture 状态的转换（等待点击）
-            current is BubbleState.MultiPageCapture && event is BubbleEvent.SingleTap -> 
+            current is BubbleState.MultiPageCapture && event is BubbleEvent.CaptureStart ->
                 BubbleState.MultiPageCapturing(current.capturedBitmaps, current.captureCount)
-            
-            current is BubbleState.MultiPageCapture && event is BubbleEvent.CaptureStart -> 
-                BubbleState.MultiPageCapturing(current.capturedBitmaps, current.captureCount)
-            
-            current is BubbleState.MultiPageCapture && event is BubbleEvent.DoubleTap -> 
+
+            current is BubbleState.MultiPageCapture && event is BubbleEvent.DoubleTap ->
                 BubbleState.Idle
-            
-            current is BubbleState.MultiPageCapture && event is BubbleEvent.SendCaptures -> 
+
+            current is BubbleState.MultiPageCapture && event is BubbleEvent.SendCaptures ->
                 BubbleState.Processing
 
             // MultiPageCapturing 状态的转换（正在截图）
-            current is BubbleState.MultiPageCapturing && event is BubbleEvent.CaptureTaken -> 
+            current is BubbleState.MultiPageCapturing && event is BubbleEvent.CaptureTaken ->
                 BubbleState.MultiPageCaptureSuccess(
                     current.capturedBitmaps + event.bitmap,
                     current.captureCount + 1
                 )
-            
-            current is BubbleState.MultiPageCapturing && event is BubbleEvent.CaptureFailed -> 
+
+            current is BubbleState.MultiPageCapturing && event is BubbleEvent.CaptureFailed ->
                 BubbleState.MultiPageCapture(current.capturedBitmaps, current.captureCount)
-            
-            current is BubbleState.MultiPageCapturing && event is BubbleEvent.DoubleTap -> 
+
+            current is BubbleState.MultiPageCapturing && event is BubbleEvent.DoubleTap ->
                 BubbleState.Idle
 
             // MultiPageCaptureSuccess 状态的转换（截图成功显示）
-            current is BubbleState.MultiPageCaptureSuccess && event is BubbleEvent.CaptureSuccessAnimationDone -> 
+            current is BubbleState.MultiPageCaptureSuccess && event is BubbleEvent.CaptureSuccessAnimationDone ->
                 BubbleState.MultiPageCapture(current.capturedBitmaps, current.captureCount)
-            
-            current is BubbleState.MultiPageCaptureSuccess && event is BubbleEvent.DoubleTap -> 
+
+            current is BubbleState.MultiPageCaptureSuccess && event is BubbleEvent.DoubleTap ->
                 BubbleState.Idle
-            
-            current is BubbleState.MultiPageCaptureSuccess && event is BubbleEvent.SendCaptures -> 
+
+            current is BubbleState.MultiPageCaptureSuccess && event is BubbleEvent.SendCaptures ->
                 BubbleState.Processing
+
+            // Error 状态的转换
+            current is BubbleState.Error && event is BubbleEvent.LongPress ->
+                BubbleState.MenuExpanded(current, event.anchorX, event.anchorY)
+
+            current is BubbleState.Error && event is BubbleEvent.EnterMultiPageCapture ->
+                BubbleState.MultiPageCapture()
+
+            current is BubbleState.Error && event is BubbleEvent.SingleTap ->
+                BubbleState.Idle
+
+            current is BubbleState.Error && event is BubbleEvent.Reset ->
+                BubbleState.Idle
+
+            // MenuExpanded 状态的转换
+            current is BubbleState.MenuExpanded && event is BubbleEvent.CloseMenu ->
+                current.previousState
+
+            current is BubbleState.MenuExpanded && event is BubbleEvent.MenuSelect ->
+                current.previousState
+
+            current is BubbleState.MenuExpanded && event is BubbleEvent.SingleTap ->
+                current.previousState
+
+            current is BubbleState.MenuExpanded && event is BubbleEvent.DoubleTap ->
+                current.previousState
+
+            current is BubbleState.MenuExpanded && event is BubbleEvent.ErrorOccurred ->
+                BubbleState.Error(event.message)
 
             // 无效转换，保持当前状态
             else -> {
                 AppDebugLogStore.i(
-                    tag, 
+                    tag,
                     "Invalid transition: ${current::class.simpleName} + ${event::class.simpleName}"
                 )
                 current

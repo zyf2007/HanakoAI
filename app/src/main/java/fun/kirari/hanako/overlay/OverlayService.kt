@@ -39,6 +39,7 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
     private lateinit var overlayViewModel: OverlayViewModel
     private var bubbleWindowController: BubbleWindowController? = null
     private var panelWindowController: PanelWindowController? = null
+    private var bubbleMenuController: BubbleMenuController? = null
     private var stateObserver: OverlayStateObserver? = null
 
     override fun onCreate() {
@@ -61,11 +62,42 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                 context = this,
                 windowManager = windowManager,
                 onSingleTap = overlayViewModel::handleSingleTap,
-                onDoubleTap = overlayViewModel::handleDoubleTap,
-                onLongPress = overlayViewModel::handleLongPress,
+                onDoubleTap = {
+                    val center = bubbleWindowController?.getBubbleCenter()
+                    if (center != null) {
+                        overlayViewModel.handleDoubleTap(center.first, center.second)
+                    } else {
+                        overlayViewModel.handleDoubleTap()
+                    }
+                    showMenuIfExpanded()
+                },
+                onLongPress = {
+                    val center = bubbleWindowController?.getBubbleCenter()
+                    if (center != null) {
+                        overlayViewModel.handleLongPress(center.first, center.second)
+                    } else {
+                        overlayViewModel.handleLongPress()
+                    }
+                    showMenuIfExpanded()
+                },
                 onLongPressHaptic = { vibrateShort() },
                 isStaticModeEnabled = {
                     overlayViewModel.uiState.value.settings.automation.staticModeEnabled
+                }
+            )
+            bubbleMenuController = BubbleMenuController(
+                context = this,
+                windowManager = windowManager,
+                lifecycleOwner = this,
+                viewModelStoreOwner = this,
+                savedStateRegistryOwner = this,
+                overlayViewModel = overlayViewModel,
+                onItemClick = { item ->
+                    overlayViewModel.handleMenuSelect(item)
+                },
+                onDismiss = {
+                    overlayViewModel.onMenuDismissed()
+                    bubbleMenuController?.dismiss()
                 }
             )
             panelWindowController = PanelWindowController(
@@ -116,6 +148,8 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
     }
 
     override fun onDestroy() {
+        bubbleMenuController?.dismiss()
+        bubbleMenuController = null
         panelWindowController?.dismiss()
         panelWindowController = null
         bubbleWindowController?.destroy()
@@ -130,6 +164,15 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun showMenuIfExpanded() {
+        val state = overlayViewModel.bubbleStateMachine.currentState
+        if (state is `fun`.kirari.hanako.automation.BubbleState.MenuExpanded) {
+            bubbleMenuController?.show()
+        } else {
+            bubbleMenuController?.dismiss()
+        }
+    }
 
     companion object {
         const val ACTION_STOP = "fun.kirari.hanako.overlay.STOP"
