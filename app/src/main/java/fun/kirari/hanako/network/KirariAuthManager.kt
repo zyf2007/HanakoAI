@@ -59,6 +59,7 @@ internal class KirariAuthManager(
             codeVerifier = request.codeVerifier,
             redirectUri = request.redirectUri
         )
+        settingsStore.savePendingKirariAuthorizationSession(requireNotNull(pendingSession))
         AppDebugLogStore.i(tag, "authorization request prepared redirectUri=${request.redirectUri}")
         KirariAuthorizationRequest(
             authorizationUrl = request.authorizationUrl,
@@ -71,21 +72,28 @@ internal class KirariAuthManager(
         settings: AppSettings,
         trustAllHttpsCertificates: Boolean
     ): KirariAuthHandleResult = withContext(Dispatchers.IO) {
-        val session = pendingSession ?: return@withContext KirariAuthHandleResult(false, "未找到待完成的登录会话")
+        val inMemorySession = pendingSession
+        val session = inMemorySession ?: settingsStore.readPendingKirariAuthorizationSession()
+            ?: return@withContext KirariAuthHandleResult(false, "未找到待完成的登录会话")
+        pendingSession = session
+        AppDebugLogStore.i(
+            tag,
+            "handleRedirect sessionSource=${if (inMemorySession != null) "memory" else "store"} state=${session.state.take(8)}"
+        )
         val error = redirectUri.getQueryParameter("error")
         if (!error.isNullOrBlank()) {
-            pendingSession = null
+            clearPendingAuthorizationSession()
             val description = redirectUri.getQueryParameter("error_description").orEmpty()
             return@withContext KirariAuthHandleResult(false, listOf(error, description).filter(String::isNotBlank).joinToString(": "))
         }
         val state = redirectUri.getQueryParameter("state").orEmpty()
         if (state != session.state) {
-            pendingSession = null
+            clearPendingAuthorizationSession()
             return@withContext KirariAuthHandleResult(false, "OIDC state 校验失败")
         }
         val code = redirectUri.getQueryParameter("code").orEmpty()
         if (code.isBlank()) {
-            pendingSession = null
+            clearPendingAuthorizationSession()
             return@withContext KirariAuthHandleResult(false, "OIDC 未返回 authorization code")
         }
         val tokenResponse = oidcClient.exchangeAuthorizationCode(
@@ -94,7 +102,7 @@ internal class KirariAuthManager(
             session = session,
             code = code
         )
-        pendingSession = null
+        clearPendingAuthorizationSession()
         persistSession(
             tokenResponse = tokenResponse,
             serverUrl = settings.kirari.serverUrl,
@@ -187,7 +195,7 @@ internal class KirariAuthManager(
     }
 
     suspend fun clearAuth() {
-        pendingSession = null
+        clearPendingAuthorizationSession()
         settingsStore.update { current ->
             current.copy(
                 kirari = current.kirari.copy(
@@ -271,6 +279,11 @@ internal class KirariAuthManager(
         nickname = nickname.orEmpty(),
         lastSyncedAtMillis = System.currentTimeMillis()
     )
+
+    private suspend fun clearPendingAuthorizationSession() {
+        pendingSession = null
+        settingsStore.clearPendingKirariAuthorizationSession()
+    }
 
     private fun redirectUri(): String = "${BuildConfig.APPLICATION_ID}:/oauth2redirect/kirari"
 }

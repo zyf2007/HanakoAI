@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import `fun`.kirari.auth.core.AuthorizationSession
 import `fun`.kirari.hanako.debug.AppDebugLogStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapConcat
@@ -62,6 +63,32 @@ class SettingsStore(private val context: Context) {
 
     suspend fun read(): AppSettings = settings.first()
 
+    suspend fun savePendingKirariAuthorizationSession(session: AuthorizationSession) {
+        context.dataStore.edit { preferences ->
+            preferences[PENDING_KIRARI_AUTH_SESSION_KEY] =
+                json.encodeToString(AuthorizationSession.serializer(), session)
+            AppDebugLogStore.i(tag, "savePendingKirariAuthorizationSession state=${session.state.take(8)}")
+        }
+    }
+
+    suspend fun readPendingKirariAuthorizationSession(): AuthorizationSession? {
+        val raw = context.dataStore.data.first()[PENDING_KIRARI_AUTH_SESSION_KEY].orEmpty()
+        if (raw.isBlank()) return null
+        return runCatching {
+            json.decodeFromString(AuthorizationSession.serializer(), raw)
+        }.getOrElse { error ->
+            AppDebugLogStore.e(tag, "readPendingKirariAuthorizationSession failed", error)
+            null
+        }
+    }
+
+    suspend fun clearPendingKirariAuthorizationSession() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(PENDING_KIRARI_AUTH_SESSION_KEY)
+            AppDebugLogStore.i(tag, "clearPendingKirariAuthorizationSession")
+        }
+    }
+
     private suspend fun persistMigrated(settings: AppSettings) {
         context.dataStore.edit { preferences ->
             preferences[SETTINGS_KEY] = json.encodeToString(AppSettings.serializer(), settings)
@@ -70,6 +97,7 @@ class SettingsStore(private val context: Context) {
 
     companion object {
         private val SETTINGS_KEY = stringPreferencesKey("app_settings")
+        private val PENDING_KIRARI_AUTH_SESSION_KEY = stringPreferencesKey("pending_kirari_auth_session")
 
         private fun migrateHistoryImages(context: Context, settings: AppSettings): AppSettings {
             val needsMigration = settings.history.any { it.screenshotBase64 != null && it.screenshotPath == null } ||

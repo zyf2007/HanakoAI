@@ -27,6 +27,7 @@ data class AuthorizationRequest(
     val redirectUri: String
 )
 
+@Serializable
 data class AuthorizationSession(
     val state: String,
     val codeVerifier: String,

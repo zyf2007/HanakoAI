@@ -335,8 +335,17 @@ fun AppSettings.normalize(): AppSettings {
 }
 
 private fun KirariSettings.normalize(): KirariSettings {
-    val resolvedServerUrl = serverUrl.trim().ifBlank { BuildConfig.KIRARI_SERVER_URL.trim() }
+    val resolvedServerUrl = serverUrl
+        .trim()
+        .prependHttpSchemeIfMissing()
+        .ifBlank { BuildConfig.KIRARI_SERVER_URL.trim() }
     return copy(serverUrl = resolvedServerUrl)
+}
+
+private fun String.prependHttpSchemeIfMissing(): String {
+    val trimmed = trim()
+    if (trimmed.isBlank()) return ""
+    return if ("://" in trimmed) trimmed else "http://$trimmed"
 }
 
 private data class NormalizedAssistants(

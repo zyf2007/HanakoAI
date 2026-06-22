@@ -69,11 +69,13 @@ data class KirariAccountState(
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
+    private val tag = "HanakoMainViewModel"
     private val container = (application as HanakoApplication).container
     private val repository: SettingsRepository = container.settingsRepository
     private val localOcrManager: LocalOcrManager = container.localOcrManager
     private val providerModelsApi = container.providerModelsApi
     private val kirariAuthManager = container.kirariAuthManager
+    private val settingsStore = container.settingsStore
 
     private val _connectionTestState = MutableStateFlow(ConnectionTestState())
     val connectionTestState: StateFlow<ConnectionTestState> = _connectionTestState.asStateFlow()
@@ -265,7 +267,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateKirariSettings(transform: (KirariSettings) -> KirariSettings) {
         viewModelScope.launch {
             repository.update { current ->
-                current.copy(kirari = transform(current.kirari))
+                val updatedSettings = current.copy(kirari = transform(current.kirari))
+                AppDebugLogStore.i(tag, "updateKirariSettings serverUrl=${updatedSettings.kirari.serverUrl}")
+                updatedSettings
             }
         }
     }
@@ -273,9 +277,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startKirariLogin(onReady: (String) -> Unit) {
         viewModelScope.launch {
             runCatching {
+                val latestSettings = settingsStore.read()
+                AppDebugLogStore.i(tag, "startKirariLogin serverUrl=${latestSettings.kirari.serverUrl}")
                 kirariAuthManager.buildAuthorizationRequest(
-                    serverUrl = settings.value.kirari.serverUrl,
-                    trustAllHttpsCertificates = settings.value.trustAllHttpsCertificates
+                    serverUrl = latestSettings.kirari.serverUrl,
+                    trustAllHttpsCertificates = latestSettings.trustAllHttpsCertificates
                 )
             }.onSuccess { request ->
                 onReady(request.authorizationUrl)
@@ -290,10 +296,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!kirariAuthManager.matchesRedirect(uri)) return
         viewModelScope.launch {
             val result = runCatching {
+                val latestSettings = settingsStore.read()
+                AppDebugLogStore.i(tag, "handleKirariRedirect serverUrl=${latestSettings.kirari.serverUrl}")
                 kirariAuthManager.handleRedirect(
                     redirectUri = uri,
-                    settings = settings.value,
-                    trustAllHttpsCertificates = settings.value.trustAllHttpsCertificates
+                    settings = latestSettings,
+                    trustAllHttpsCertificates = latestSettings.trustAllHttpsCertificates
                 )
             }.getOrElse { error ->
                 KirariAuthHandleResult(
