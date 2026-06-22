@@ -1,6 +1,7 @@
 package `fun`.kirari.hanako.network
 
 import `fun`.kirari.hanako.data.ModelProviderConfig
+import `fun`.kirari.hanako.data.KIRARI_PROVIDER_ID
 import `fun`.kirari.hanako.data.SettingsStore
 import `fun`.kirari.hanako.debug.AppDebugLogStore
 import `fun`.kirari.llm.core.LlmClient
@@ -42,9 +43,10 @@ internal class UnifiedLLMClient(
                     trustAllHttpsCertificates = trustAllHttpsCertificates
                 )
                 require(accessToken.isNotBlank()) { "请先登录 The Kirari Network" }
+                val baseUrl = settings.availableKirariServerUrl()
                 ProviderConfig(
                     kind = ProviderKind.KIRARI_NETWORK,
-                    baseUrl = provider.baseUrl.trimEnd('/') + "/api/llm",
+                    baseUrl = baseUrl.trimEnd('/') + "/api/llm",
                     apiKey = accessToken,
                     headers = mapOf("Accept" to "application/json, text/event-stream")
                 )
@@ -72,5 +74,11 @@ internal class UnifiedLLMClient(
             baseUrl = baseUrl,
             apiKey = apiKey
         )
+    }
+
+    private fun `fun`.kirari.hanako.data.AppSettings.availableKirariServerUrl(): String {
+        return kirari.serverUrl.trim().ifBlank {
+            providers.firstOrNull { it.id == KIRARI_PROVIDER_ID }?.baseUrl?.trim().orEmpty()
+        }
     }
 }

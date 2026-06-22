@@ -87,7 +87,7 @@ val ProviderKind.defaultBaseUrl: String
         ProviderKind.OPENAI_RESPONSES -> "https://api.openai.com/v1"
         ProviderKind.ANTHROPIC -> "https://api.anthropic.com/v1"
         ProviderKind.GOOGLE -> "https://generativelanguage.googleapis.com/v1beta"
-        ProviderKind.KIRARI_NETWORK -> BuildConfig.KIRARI_SERVER_URL
+        ProviderKind.KIRARI_NETWORK -> ""
     }
 
 val ProviderKind.requestPathSuffix: String
@@ -300,10 +300,15 @@ fun AppSettings.normalize(): AppSettings {
         assistants = assistants,
         selectedAssistantId = selectedAssistantId
     )
-    val availableProviders = availableProviders()
+    val normalizedKirari = kirari.normalize()
+    val availableProviders = copy(
+        providers = normalizedProviders,
+        kirari = normalizedKirari
+    ).availableProviders()
     val fallbackProvider = availableProviders.firstOrNull { it.id == selectedProviderId } ?: availableProviders.firstOrNull()
     return copy(
         providers = normalizedProviders,
+        kirari = normalizedKirari,
         selectedProviderId = selectedProviderId
             ?.takeIf { candidate -> availableProviders.any { it.id == candidate } }
             ?: fallbackProvider?.id,
@@ -327,6 +332,11 @@ fun AppSettings.normalize(): AppSettings {
             } ?: fallbackProvider?.visionModel.orEmpty()
         )
     )
+}
+
+private fun KirariSettings.normalize(): KirariSettings {
+    val resolvedServerUrl = serverUrl.trim().ifBlank { BuildConfig.KIRARI_SERVER_URL.trim() }
+    return copy(serverUrl = resolvedServerUrl)
 }
 
 private data class NormalizedAssistants(

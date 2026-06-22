@@ -1,6 +1,7 @@
 package `fun`.kirari.hanako.network
 
 import `fun`.kirari.hanako.data.ModelProviderConfig
+import `fun`.kirari.hanako.data.KIRARI_PROVIDER_ID
 import `fun`.kirari.hanako.data.SettingsStore
 import `fun`.kirari.llm.core.ConnectionTestResult
 import `fun`.kirari.llm.core.ProviderCatalog
@@ -49,6 +50,7 @@ internal class ProviderModelsApi(
                 val settings = store.read()
                 val token = manager.ensureValidAccessToken(settings, trustAllHttpsCertificates)
                 require(token.isNotBlank()) { "请先登录 The Kirari Network" }
+                val baseUrl = settings.availableKirariServerUrl()
                 ProviderConfig(
                     kind = ProviderKind.KIRARI_NETWORK,
                     baseUrl = baseUrl.trimEnd('/') + "/api/llm",
@@ -61,6 +63,12 @@ internal class ProviderModelsApi(
                 baseUrl = baseUrl,
                 apiKey = apiKey
             )
+        }
+    }
+
+    private fun `fun`.kirari.hanako.data.AppSettings.availableKirariServerUrl(): String {
+        return kirari.serverUrl.trim().ifBlank {
+            providers.firstOrNull { it.id == KIRARI_PROVIDER_ID }?.baseUrl?.trim().orEmpty()
         }
     }
 }
