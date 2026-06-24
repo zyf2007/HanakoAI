@@ -332,18 +332,18 @@ private fun HeroHint(
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
             !overlayEnabled -> {
             if (staticModeEnabled) {
-                "提示：静态模式已开启，点击启动直接进入自动模式；Android 14+ 首次会弹出截屏授权。"
+                "提示：静态模式已开启，点击启动直接进入自动模式；悬浮球双击展开快捷菜单；Android 14+ 首次会弹出截屏授权。"
             } else {
-                "提示：点击启动进入普通模式，长按启动进入自动模式；Android 14+ 首次会弹出截屏授权。"
+                "提示：点击启动进入普通模式，长按启动进入自动模式；悬浮球双击展开快捷菜单；Android 14+ 首次会弹出截屏授权。"
             }
         }
         captureMethod == ScreenCaptureMethod.SHIZUKU_ADB && !overlayEnabled ->
-            "提示：当前使用 Shizuku 路线。启动时会先申请 Shizuku 授权，后续截图走 shell screencap。"
+            "提示：当前使用 Shizuku 路线。启动时会先申请 Shizuku 授权，后续截图走 shell screencap；悬浮球双击展开快捷菜单。"
         !overlayEnabled -> {
             if (staticModeEnabled) {
-                "静态模式已开启，点击启动直接进入自动模式。"
+                "静态模式已开启，点击启动直接进入自动模式；悬浮球双击展开快捷菜单。"
             } else {
-                "点击启动进入普通模式，长按启动进入自动模式。"
+                "点击启动进入普通模式，长按启动进入自动模式；悬浮球双击展开快捷菜单。"
             }
         }
         else -> null

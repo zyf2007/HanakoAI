@@ -23,7 +23,7 @@ internal class MultiPageCaptureController(
 
     fun enter() {
         AppDebugLogStore.i(tag, "enter")
-        bubbleStateMachine.dispatch(BubbleEvent.LongPress)
+        bubbleStateMachine.dispatch(BubbleEvent.EnterMultiPageCapture)
     }
 
     fun capturePage() {
