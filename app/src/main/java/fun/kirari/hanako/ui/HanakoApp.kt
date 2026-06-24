@@ -256,7 +256,8 @@ fun HanakoApp(viewModel: MainViewModel) {
                     val providerId = entry.arguments?.getString(ARG_PROVIDER_ID)
                     val provider = settings.availableProviders().firstOrNull { it.id == providerId }
                     if (provider != null) {
-                        val connectionTestState by viewModel.connectionTestState.collectAsState()
+                        val connectionTestStates by viewModel.connectionTestManager.states.collectAsState()
+                        val connectionTestState = connectionTestStates[provider.id] ?: ConnectionTestState()
                         val providerMetaState by viewModel.providerMetaState.collectAsState()
                         val kirariAccountState by viewModel.kirariAccountState.collectAsState()
                         ProviderDetailScreen(
@@ -272,7 +273,7 @@ fun HanakoApp(viewModel: MainViewModel) {
                                 )
                             },
                             onTestConnection = viewModel::testProviderConnection,
-                            onClearConnectionTest = viewModel::resetConnectionTest,
+                            onClearConnectionTest = { viewModel.resetConnectionTest(provider.id) },
                             onLoadProviderMeta = viewModel::loadProviderMeta,
                             onClearProviderMeta = viewModel::resetProviderMeta,
                             onLoginKirari = {
@@ -327,6 +328,7 @@ fun HanakoApp(viewModel: MainViewModel) {
                         selectedMethod = settings.screenCaptureMethod,
                         trustAllHttpsCertificates = settings.trustAllHttpsCertificates,
                         kirariSettings = settings.kirari,
+                        webSearchSettings = settings.webSearch,
                         hasKirariClientId = viewModel.hasKirariClientId(),
                         onToggleCompletionNotification = { enabled ->
                             viewModel.updateAutomationSettings {
@@ -356,7 +358,10 @@ fun HanakoApp(viewModel: MainViewModel) {
                                 )
                             }
                         },
-                        onLogoutKirari = viewModel::logoutKirari
+                        onLogoutKirari = viewModel::logoutKirari,
+                        onUpdateWebSearchSettings = { transform ->
+                            viewModel.updateWebSearchSettings(transform)
+                        }
                     )
                 }
                 composable(ROUTE_SETTINGS_STATIC_VIBRATION) {

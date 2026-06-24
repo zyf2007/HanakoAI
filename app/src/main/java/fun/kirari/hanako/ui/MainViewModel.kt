@@ -77,9 +77,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val kirariAuthManager = container.kirariAuthManager
     private val settingsStore = container.settingsStore
 
-    private val _connectionTestState = MutableStateFlow(ConnectionTestState())
-    val connectionTestState: StateFlow<ConnectionTestState> = _connectionTestState.asStateFlow()
-    private var connectionTestJob: Job? = null
+    val connectionTestManager = ConnectionTestManager()
+    private val connectionTestJobs = mutableMapOf<String, Job>()
     private val _kirariAuthMessage = MutableStateFlow<String?>(null)
     val kirariAuthMessage: StateFlow<String?> = _kirariAuthMessage.asStateFlow()
     private val _providerMetaState = MutableStateFlow(ProviderMetaState())
@@ -274,6 +273,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateWebSearchSettings(transform: (`fun`.kirari.hanako.data.WebSearchSettings) -> `fun`.kirari.hanako.data.WebSearchSettings) {
+        viewModelScope.launch {
+            repository.update { current ->
+                current.copy(webSearch = transform(current.webSearch))
+            }
+        }
+    }
+
     fun startKirariLogin(onReady: (String) -> Unit) {
         viewModelScope.launch {
             runCatching {
@@ -355,31 +362,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun testProviderConnection(provider: ModelProviderConfig) {
-        connectionTestJob?.cancel()
-        _connectionTestState.value = ConnectionTestState(status = ConnectionTestStatus.TESTING)
-        connectionTestJob = viewModelScope.launch {
+        val providerId = provider.id
+        connectionTestJobs[providerId]?.cancel()
+        connectionTestManager.setState(providerId, ConnectionTestState(status = ConnectionTestStatus.TESTING))
+        connectionTestJobs[providerId] = viewModelScope.launch {
             val trustAll = settings.value.trustAllHttpsCertificates
             val result = providerModelsApi.testConnection(provider, trustAll)
             if (!isActive) return@launch
-            _connectionTestState.value = if (result.success) {
-                ConnectionTestState(
-                    status = ConnectionTestStatus.SUCCESS,
-                    latencyMs = result.latencyMs
-                )
-            } else {
-                ConnectionTestState(
-                    status = ConnectionTestStatus.FAILED,
-                    latencyMs = result.latencyMs,
-                    errorMessage = result.errorMessage
-                )
-            }
+            connectionTestManager.setState(
+                providerId,
+                if (result.success) {
+                    ConnectionTestState(
+                        status = ConnectionTestStatus.SUCCESS,
+                        latencyMs = result.latencyMs
+                    )
+                } else {
+                    ConnectionTestState(
+                        status = ConnectionTestStatus.FAILED,
+                        latencyMs = result.latencyMs,
+                        errorMessage = result.errorMessage
+                    )
+                }
+            )
         }
     }
 
-    fun resetConnectionTest() {
-        connectionTestJob?.cancel()
-        connectionTestJob = null
-        _connectionTestState.value = ConnectionTestState()
+    fun resetConnectionTest(providerId: String) {
+        connectionTestJobs[providerId]?.cancel()
+        connectionTestJobs.remove(providerId)
+        connectionTestManager.reset(providerId)
     }
 
     fun loadProviderMeta(provider: ModelProviderConfig) {

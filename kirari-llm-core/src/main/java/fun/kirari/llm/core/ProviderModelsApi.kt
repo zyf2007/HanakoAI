@@ -40,6 +40,11 @@ class ProviderModelsApi(
     private val clientProvider: NetworkClientProvider = NetworkClientProvider(),
     private val json: Json = Json { ignoreUnknownKeys = true }
 ) {
+    private companion object {
+        const val TEST_TIMEOUT_MILLIS = 60_000L
+        const val CATALOG_TIMEOUT_MILLIS = 60_000L
+    }
+
     suspend fun getCatalog(
         provider: ProviderConfig,
         trustAllHttpsCertificates: Boolean = false
@@ -50,7 +55,8 @@ class ProviderModelsApi(
             .get()
             .build()
 
-        clientProvider.client(trustAllHttpsCertificates).newCall(request).execute().use { response ->
+        clientProvider.clientWithTimeout(trustAllHttpsCertificates, CATALOG_TIMEOUT_MILLIS)
+            .newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 error("Failed to get models: ${response.code} ${response.body?.string()}")
             }
@@ -75,6 +81,13 @@ class ProviderModelsApi(
         provider: ProviderConfig,
         trustAllHttpsCertificates: Boolean = false
     ): ConnectionTestResult = withContext(Dispatchers.IO) {
+        // 空 API Key 早返回，不发网络请求
+        if (provider.apiKey.isBlank()) {
+            return@withContext ConnectionTestResult(
+                success = false,
+                errorMessage = "请填写 API 密钥"
+            )
+        }
         val startTime = System.currentTimeMillis()
         try {
             val request = Request.Builder()
@@ -83,19 +96,20 @@ class ProviderModelsApi(
                 .get()
                 .build()
 
-            clientProvider.client(trustAllHttpsCertificates).newCall(request).execute().use { response ->
-                val latency = System.currentTimeMillis() - startTime
-                if (!response.isSuccessful) {
-                    val body = response.body?.string().orEmpty()
-                    val message = parseErrorMessage(body) ?: "HTTP ${response.code}"
-                    return@withContext ConnectionTestResult(
-                        success = false,
-                        latencyMs = latency,
-                        errorMessage = message
-                    )
+            clientProvider.clientWithTimeout(trustAllHttpsCertificates, TEST_TIMEOUT_MILLIS)
+                .newCall(request).execute().use { response ->
+                    val latency = System.currentTimeMillis() - startTime
+                    if (!response.isSuccessful) {
+                        val body = response.body?.string().orEmpty()
+                        val message = parseErrorMessage(body) ?: "HTTP ${response.code}"
+                        return@withContext ConnectionTestResult(
+                            success = false,
+                            latencyMs = latency,
+                            errorMessage = message
+                        )
+                    }
+                    return@withContext ConnectionTestResult(success = true, latencyMs = latency)
                 }
-                return@withContext ConnectionTestResult(success = true, latencyMs = latency)
-            }
         } catch (e: Exception) {
             val latency = System.currentTimeMillis() - startTime
             val message = when {

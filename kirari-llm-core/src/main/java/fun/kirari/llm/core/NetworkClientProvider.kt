@@ -37,4 +37,14 @@ open class NetworkClientProvider(
     fun client(trustAllHttpsCertificates: Boolean): OkHttpClient {
         return if (trustAllHttpsCertificates) trustAllClient else safeClient
     }
+
+    /**
+     * 返回带指定超时时间的客户端（用于非流式请求，如搜索 API）。
+     * 基于 [client] 派生，复用 SSL 配置。
+     */
+    fun clientWithTimeout(trustAllHttpsCertificates: Boolean, timeoutMillis: Long): OkHttpClient {
+        return client(trustAllHttpsCertificates).newBuilder()
+            .readTimeout(timeoutMillis, TimeUnit.MILLISECONDS)
+            .build()
+    }
 }
