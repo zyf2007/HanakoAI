@@ -132,6 +132,37 @@ data class AutomationSettings(
 )
 
 @Serializable
+enum class SearchProviderKind(val displayName: String) {
+    TAVILY("Tavily"),
+    BRAVE("Brave Search"),
+    SERPER("Serper.dev"),
+    CUSTOM("自定义 (Tavily 兼容)")
+}
+
+val SearchProviderKind.defaultBaseUrl: String
+    get() = when (this) {
+        SearchProviderKind.TAVILY -> "https://api.tavily.com/search"
+        SearchProviderKind.BRAVE -> "https://api.search.brave.com/res/v1/web/search"
+        SearchProviderKind.SERPER -> "https://google.serper.dev/search"
+        SearchProviderKind.CUSTOM -> ""
+    }
+
+@Serializable
+data class SearchProviderConfig(
+    val kind: SearchProviderKind = SearchProviderKind.TAVILY,
+    val baseUrl: String = kind.defaultBaseUrl,
+    val apiKey: String = ""
+)
+
+@Serializable
+data class WebSearchSettings(
+    val enabled: Boolean = false,
+    val provider: SearchProviderConfig = SearchProviderConfig(),
+    val maxResults: Int = 3,
+    val automationAlsoSearch: Boolean = false
+)
+
+@Serializable
 data class AppSettings(
     val providers: List<ModelProviderConfig> = listOf(defaultProvider()),
     val selectedProviderId: String? = providers.firstOrNull()?.id,
@@ -146,6 +177,7 @@ data class AppSettings(
     val ocrModelSelection: ModelSelection = ModelSelection(),
     val localOcr: LocalOcrSettings = LocalOcrSettings(),
     val kirari: KirariSettings = KirariSettings(),
+    val webSearch: WebSearchSettings = WebSearchSettings(),
     val lastResult: ProcessingResult? = null,
     val history: List<ProcessingResult> = emptyList()
 )

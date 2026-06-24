@@ -131,7 +131,7 @@ internal class AutoProcessingController(
                 val (action, result) = when (models.route) {
                     ProcessingRoute.OCR_THEN_LLM -> {
                         pipeline.validateOcrThenLlmModels(models)
-                        val (ocrText, automationResult) = pipeline.streamOcrThenAutomation(
+                        val (ocrText, automationResult, searchOutcome) = pipeline.streamOcrThenAutomation(
                             models = models,
                             bitmaps = bitmaps,
                             onOcrDelta = { delta ->
@@ -141,7 +141,7 @@ internal class AutoProcessingController(
                                 uiState.update { current -> current.copy(liveAnswerText = current.liveAnswerText + delta) }
                             }
                         )
-                        pipeline.buildAutomationResult(baseResult, models, ocrText, automationResult, historyId, screenshotPaths)
+                        pipeline.buildAutomationResult(baseResult, models, ocrText, automationResult, historyId, screenshotPaths, searchOutcome)
                     }
                     ProcessingRoute.MULTIMODAL_DIRECT -> {
                         pipeline.validateVisionModels(models)
@@ -152,7 +152,7 @@ internal class AutoProcessingController(
                                 uiState.update { current -> current.copy(liveAnswerText = current.liveAnswerText + delta) }
                             }
                         )
-                        pipeline.buildAutomationResult(baseResult, models, "", automationResult, historyId, screenshotPaths)
+                        pipeline.buildAutomationResult(baseResult, models, "", automationResult, historyId, screenshotPaths, null)
                     }
                 }
                 AppDebugLogStore.i(tag, "processBitmaps gateway success resultId=${result.id} action=${action.type}")

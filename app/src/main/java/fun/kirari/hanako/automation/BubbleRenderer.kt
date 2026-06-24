@@ -58,6 +58,8 @@ internal object BubbleRenderer {
             is BubbleState.MultiPageCapture -> renderMultiPageCapture(state, context)
             is BubbleState.MultiPageCapturing -> renderMultiPageCapturing(state, context)
             is BubbleState.MultiPageCaptureSuccess -> renderMultiPageCaptureSuccess(state, context)
+            is BubbleState.MenuExpanded -> renderMenuExpanded(state, launchMode, context)
+            is BubbleState.Error -> renderError(context)
         }
     }
 
@@ -148,12 +150,36 @@ internal object BubbleRenderer {
         return BubbleAppearance(
             backgroundColor = Color.parseColor("#FFDAD6"),
             iconTint = Color.parseColor("#BA1A1A"),
-            iconRes = R.drawable.ic_bubble_image,  // 图片图标表示截图成功
+            iconRes = R.drawable.ic_bubble_image,
             spinnerColor = Color.parseColor("#BA1A1A"),
             showSpinner = false,
             letters = null,
             showCaptureCount = true,
             captureCount = state.captureCount
+        )
+    }
+
+    private fun renderMenuExpanded(
+        state: BubbleState.MenuExpanded,
+        launchMode: OverlayLaunchMode,
+        context: Context
+    ): BubbleAppearance {
+        val prev = if (state.previousState is BubbleState.MenuExpanded) BubbleState.Idle else state.previousState
+        val baseAppearance = render(prev, launchMode, context, staticModeEnabled = false)
+        return baseAppearance.copy(
+            iconRes = R.drawable.ic_bubble_menu,
+            letters = null
+        )
+    }
+
+    private fun renderError(context: Context): BubbleAppearance {
+        return BubbleAppearance(
+            backgroundColor = Color.parseColor("#B3261E"),
+            iconTint = Color.WHITE,
+            iconRes = R.drawable.ic_bubble_error,
+            spinnerColor = Color.WHITE,
+            showSpinner = false,
+            letters = null
         )
     }
 
@@ -176,6 +202,8 @@ internal object BubbleRenderer {
             is BubbleState.MultiPageCapture -> "MultiPageCapture(count=${state.captureCount})"
             is BubbleState.MultiPageCapturing -> "MultiPageCapturing(count=${state.captureCount})"
             is BubbleState.MultiPageCaptureSuccess -> "MultiPageCaptureSuccess(count=${state.captureCount})"
+            is BubbleState.MenuExpanded -> "MenuExpanded(prev=${state.previousState::class.simpleName})"
+            is BubbleState.Error -> "Error(${state.message})"
         }
     }
 }

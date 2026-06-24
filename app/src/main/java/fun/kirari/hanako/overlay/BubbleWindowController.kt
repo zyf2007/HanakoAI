@@ -38,6 +38,8 @@ internal class BubbleWindowController(
     private var textView: TextView? = null
     private var spinnerView: ProgressBar? = null
     private var colorAnimator: ValueAnimator? = null
+    private var currentParams: WindowManager.LayoutParams? = null
+    private var countView: TextView? = null
 
     fun show() {
         if (bubbleView != null) return
@@ -56,6 +58,34 @@ internal class BubbleWindowController(
             gravity = Gravity.START or Gravity.TOP
             x = 32
             y = 360
+        }
+        val shadowSizePx = surfaceSizePx + (3f * density).roundToInt()
+        val shadowView = android.view.View(context).apply {
+            layoutParams = FrameLayout.LayoutParams(shadowSizePx, shadowSizePx, Gravity.CENTER)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(android.graphics.Color.parseColor("#20000000"))
+            }
+            translationY = 1.5f * density
+            alpha = 0.45f
+        }
+        val countSizePx = (18f * density).roundToInt()
+        val countView = TextView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(countSizePx, countSizePx).apply {
+                gravity = Gravity.TOP or Gravity.END
+                topMargin = (2f * density).roundToInt()
+                marginEnd = (2f * density).roundToInt()
+            }
+            gravity = Gravity.CENTER
+            textSize = 10f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(android.graphics.Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(android.graphics.Color.parseColor("#BA1A1A"))
+                setStroke((1.5f * density).roundToInt(), android.graphics.Color.WHITE)
+            }
+            visibility = View.GONE
         }
         val spinner = ProgressBar(context, null, android.R.attr.progressBarStyleSmall).apply {
             layoutParams = FrameLayout.LayoutParams(spinnerSizePx, spinnerSizePx, Gravity.CENTER)
@@ -79,11 +109,13 @@ internal class BubbleWindowController(
             addView(icon)
             addView(text)
         }
-        val view = createBubbleRoot(rootSizePx, params, spinner, surface)
+        val view = createBubbleRoot(rootSizePx, params, shadowView, spinner, surface, countView)
         surfaceView = surface
         iconView = icon
         textView = text
         spinnerView = spinner
+        this.countView = countView
+        currentParams = params
         windowManager.addView(view, params)
         bubbleView = view
         update(BubbleState.Idle, OverlayLaunchMode.NORMAL)
@@ -136,6 +168,7 @@ internal class BubbleWindowController(
 
         updateIconAndText(icon, text, appearance)
         updateSpinner(spinner, appearance)
+        updateCaptureCount(countView, appearance)
     }
 
     fun destroy() {
@@ -147,19 +180,35 @@ internal class BubbleWindowController(
         iconView = null
         textView = null
         spinnerView = null
+        countView = null
+        currentParams = null
+    }
+
+    /**
+     * 返回气泡中心在屏幕上的坐标，用于菜单定位。
+     */
+    fun getBubbleCenter(): Pair<Int, Int>? {
+        val params = currentParams ?: return null
+        val density = context.resources.displayMetrics.density
+        val rootSizePx = (56f * density).roundToInt()
+        return Pair(params.x + rootSizePx / 2, params.y + rootSizePx / 2)
     }
 
     private fun createBubbleRoot(
         rootSizePx: Int,
         params: WindowManager.LayoutParams,
+        shadowView: android.view.View,
         spinner: ProgressBar,
-        surface: FrameLayout
+        surface: FrameLayout,
+        countView: TextView
     ): FrameLayout {
         val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
         return FrameLayout(context).apply {
             layoutParams = FrameLayout.LayoutParams(rootSizePx, rootSizePx)
+            addView(shadowView)
             addView(spinner)
             addView(surface)
+            addView(countView)
             var downRawX = 0f
             var downRawY = 0f
             var startX = 0
@@ -269,7 +318,9 @@ internal class BubbleWindowController(
                     .alpha(0f)
                     .scaleX(0.82f)
                     .scaleY(0.82f)
-                    .setDuration(120L)
+                    .rotation(-45f)
+                    .setDuration(90L)
+                    .setInterpolator(android.view.animation.AccelerateInterpolator())
                     .withEndAction {
                         icon.setImageDrawable(ContextCompat.getDrawable(context, appearance.iconRes))
                         icon.imageTintList = ColorStateList.valueOf(appearance.iconTint)
@@ -278,7 +329,9 @@ internal class BubbleWindowController(
                             .alpha(1f)
                             .scaleX(1f)
                             .scaleY(1f)
+                            .rotation(0f)
                             .setDuration(180L)
+                            .setInterpolator(android.view.animation.OvershootInterpolator(1.6f))
                             .start()
                     }
                     .start()
@@ -321,6 +374,20 @@ internal class BubbleWindowController(
                     alpha = 0f
                     visibility = View.GONE
                 }
+            }
+        }
+    }
+
+    private fun updateCaptureCount(
+        countView: TextView?,
+        appearance: `fun`.kirari.hanako.automation.BubbleAppearance
+    ) {
+        countView?.apply {
+            if (appearance.showCaptureCount) {
+                text = appearance.captureCount.toString()
+                visibility = View.VISIBLE
+            } else {
+                visibility = View.GONE
             }
         }
     }

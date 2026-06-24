@@ -1,12 +1,12 @@
 package `fun`.kirari.hanako.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,10 +17,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -29,6 +32,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,11 +43,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.BuildConfig
 import `fun`.kirari.hanako.data.AutomationSettings
 import `fun`.kirari.hanako.data.KirariSettings
 import `fun`.kirari.hanako.data.ScreenCaptureMethod
+import `fun`.kirari.hanako.data.SearchProviderKind
+import `fun`.kirari.hanako.data.WebSearchSettings
+import `fun`.kirari.hanako.data.defaultBaseUrl
 import `fun`.kirari.hanako.data.description
 import `fun`.kirari.hanako.data.displayName
 
@@ -53,6 +62,7 @@ fun MoreSettingsScreen(
     selectedMethod: ScreenCaptureMethod,
     trustAllHttpsCertificates: Boolean,
     kirariSettings: KirariSettings,
+    webSearchSettings: WebSearchSettings,
     hasKirariClientId: Boolean,
     onToggleCompletionNotification: (Boolean) -> Unit,
     onToggleStaticMode: (Boolean) -> Unit,
@@ -62,7 +72,8 @@ fun MoreSettingsScreen(
     onToggleTrustAllHttpsCertificates: (Boolean) -> Unit,
     onUpdateKirariServerUrl: (String) -> Unit,
     onLoginKirari: () -> Unit,
-    onLogoutKirari: () -> Unit
+    onLogoutKirari: () -> Unit,
+    onUpdateWebSearchSettings: ((WebSearchSettings) -> WebSearchSettings) -> Unit
 ) {
     var timeoutInput by remember(automationSettings.autoModeTimeoutSeconds) {
         mutableStateOf(automationSettings.autoModeTimeoutSeconds.toString())
@@ -102,6 +113,18 @@ fun MoreSettingsScreen(
                 TrustAllHttpsSwitch(
                     trustAllHttpsCertificates = trustAllHttpsCertificates,
                     onToggleTrustAllHttpsCertificates = onToggleTrustAllHttpsCertificates
+                )
+            }
+        }
+        item {
+            MoreSettingCard(
+                icon = Icons.Default.Search,
+                title = "联网搜索",
+                subtitle = "OCR 后自动搜索最新信息增强回答。"
+            ) {
+                WebSearchSettingsCard(
+                    webSearchSettings = webSearchSettings,
+                    onUpdateWebSearchSettings = onUpdateWebSearchSettings
                 )
             }
         }
@@ -438,5 +461,104 @@ private fun MoreSettingCard(
             }
             content()
         }
+    }
+}
+
+@Composable
+private fun WebSearchSettingsCard(
+    webSearchSettings: WebSearchSettings,
+    onUpdateWebSearchSettings: ((WebSearchSettings) -> WebSearchSettings) -> Unit
+) {
+    var showApiKey by remember { mutableStateOf(false) }
+    var searchProviderExpanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SwitchSettingRow(
+            title = "启用联网搜索",
+            subtitle = "OCR 完成后自动判断是否需要搜索最新信息",
+            checked = webSearchSettings.enabled,
+            onCheckedChange = { enabled ->
+                onUpdateWebSearchSettings { it.copy(enabled = enabled) }
+            }
+        )
+        Text(
+            "仅在 OCR -> 文本模型路由下可用，多模态直接模式不支持。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        // 搜索引擎选择
+        Box {
+            OutlinedButton(
+                onClick = { searchProviderExpanded = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("搜索引擎：${webSearchSettings.provider.kind.displayName}")
+            }
+            DropdownMenu(
+                expanded = searchProviderExpanded,
+                onDismissRequest = { searchProviderExpanded = false }
+            ) {
+                SearchProviderKind.entries.forEach { kind ->
+                    DropdownMenuItem(
+                        text = { Text(kind.displayName) },
+                        onClick = {
+                            onUpdateWebSearchSettings {
+                                it.copy(
+                                    provider = it.provider.copy(
+                                        kind = kind,
+                                        baseUrl = kind.defaultBaseUrl
+                                    )
+                                )
+                            }
+                            searchProviderExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+        OutlinedTextField(
+            value = webSearchSettings.provider.baseUrl,
+            onValueChange = { url ->
+                onUpdateWebSearchSettings {
+                    it.copy(provider = it.provider.copy(baseUrl = url))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("API URL") }
+        )
+        OutlinedTextField(
+            value = webSearchSettings.provider.apiKey,
+            onValueChange = { key ->
+                onUpdateWebSearchSettings {
+                    it.copy(provider = it.provider.copy(apiKey = key))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("API Key") },
+            visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                TextButton(onClick = { showApiKey = !showApiKey }) {
+                    Text(if (showApiKey) "隐藏" else "显示")
+                }
+            }
+        )
+        SwitchSettingRow(
+            title = "自动模式也使用联网搜索",
+            subtitle = "自动答题模式下也执行联网搜索",
+            checked = webSearchSettings.automationAlsoSearch,
+            onCheckedChange = { enabled ->
+                onUpdateWebSearchSettings { it.copy(automationAlsoSearch = enabled) }
+            }
+        )
+        Text(
+            "文档：注册搜索引擎 API Key 请参考对应引擎的官网。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
