@@ -8,8 +8,8 @@ internal fun validateAutomationAction(name: String, text: String): AutomationAct
     return when (name) {
         "set_clipboard" -> clipboardAction(normalized)
         "show_bubble_letters" -> {
-            require(Regex("^[A-Z]{1,4}$").matches(normalized)) {
-                "悬浮球字母必须是 1 到 4 个大写英文字母"
+            require(Regex("^[A-Za-z]{1,8}$|^(对|错|√|×)$").matches(normalized)) {
+                "悬浮球字母必须是 1-8 个英文字母（大小写均可），或'对'、'错'、'√'、'×'"
             }
             bubbleLettersAction(normalized)
         }

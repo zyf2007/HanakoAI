@@ -43,6 +43,30 @@ sealed class BubbleState {
         val capturedBitmaps: List<Bitmap> = emptyList(),
         val captureCount: Int = 0
     ) : BubbleState()
+
+    /** 菜单展开状态（长按触发，记住之前的状态以便关闭后恢复） */
+    data class MenuExpanded(
+        val previousState: BubbleState,
+        val anchorX: Int = 0,
+        val anchorY: Int = 0
+    ) : BubbleState()
+
+    /** 错误状态（处理失败时短暂显示） */
+    data class Error(val message: String? = null) : BubbleState()
+}
+
+/**
+ * 悬浮球菜单项定义
+ */
+sealed class BubbleMenuItem {
+    /** OCR/视觉模式切换 */
+    data object ToggleRoute : BubbleMenuItem()
+    /** 联网搜索开关 */
+    data object ToggleSearch : BubbleMenuItem()
+    /** 语音识别（占位） */
+    data object VoiceRecognition : BubbleMenuItem()
+    /** 设置 */
+    data object Settings : BubbleMenuItem()
 }
 
 /**
@@ -62,11 +86,18 @@ sealed class BubbleEvent {
     /** 单击事件 */
     data object SingleTap : BubbleEvent()
 
-    /** 长按事件 */
-    data object LongPress : BubbleEvent()
+    /**
+     * 长按事件
+     * @param anchorX 气泡中心 X，用于菜单定位
+     * @param anchorY 气泡中心 Y，用于菜单定位
+     */
+    data class LongPress(val anchorX: Int = 0, val anchorY: Int = 0) : BubbleEvent()
 
     /** 双击事件 */
     data object DoubleTap : BubbleEvent()
+
+    /** 进入多图截图模式 */
+    data object EnterMultiPageCapture : BubbleEvent()
 
     /** 取消处理事件 */
     data object CancelProcessing : BubbleEvent()
@@ -80,7 +111,7 @@ sealed class BubbleEvent {
     /** 开始截图事件 */
     data object CaptureStart : BubbleEvent()
 
-    /** 截图完成事件 */
+    /** 截图完成 */
     data class CaptureTaken(val bitmap: Bitmap) : BubbleEvent()
 
     /** 截图失败事件 */
@@ -91,4 +122,13 @@ sealed class BubbleEvent {
 
     /** 发送截图事件 */
     data object SendCaptures : BubbleEvent()
+
+    /** 选择菜单项 */
+    data class MenuSelect(val item: BubbleMenuItem) : BubbleEvent()
+
+    /** 关闭菜单 */
+    data object CloseMenu : BubbleEvent()
+
+    /** 错误事件 */
+    data class ErrorOccurred(val message: String?) : BubbleEvent()
 }

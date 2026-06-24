@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import `fun`.kirari.hanako.AppContainer
 import `fun`.kirari.hanako.automation.BubbleEvent
+import `fun`.kirari.hanako.automation.BubbleMenuItem
 import `fun`.kirari.hanako.automation.BubbleState
 import `fun`.kirari.hanako.automation.BubbleStateMachine
 import `fun`.kirari.hanako.data.ModelPurpose
@@ -170,7 +171,7 @@ internal class OverlayViewModel(
                     when (models.route) {
                         ProcessingRoute.OCR_THEN_LLM -> {
                             pipeline.validateOcrThenLlmModels(models)
-                            val (ocrText, answer) = pipeline.streamOcrThenChat(
+                            val (ocrText, answer, searchOutcome) = pipeline.streamOcrThenChat(
                                 models = models,
                                 bitmaps = bitmaps,
                                 onOcrDelta = { delta ->
@@ -180,7 +181,7 @@ internal class OverlayViewModel(
                                     _uiState.update { current -> current.copy(liveAnswerText = current.liveAnswerText + delta) }
                                 }
                             )
-                            pipeline.buildChatResult(baseResult, models, ocrText, answer, historyId, screenshotPaths)
+                            pipeline.buildChatResult(baseResult, models, ocrText, answer, historyId, screenshotPaths, searchOutcome)
                         }
 
                         ProcessingRoute.MULTIMODAL_DIRECT -> {
@@ -192,7 +193,7 @@ internal class OverlayViewModel(
                                     _uiState.update { current -> current.copy(liveAnswerText = current.liveAnswerText + delta) }
                                 }
                             )
-                            pipeline.buildChatResult(baseResult, models, "", answer, historyId, screenshotPaths)
+                            pipeline.buildChatResult(baseResult, models, "", answer, historyId, screenshotPaths, null)
                         }
                     }
                 }
@@ -304,74 +305,80 @@ internal class OverlayViewModel(
     fun handleSingleTap() {
         val currentState = bubbleStateMachine.currentState
         AppDebugLogStore.i(tag, "handleSingleTap state=${currentState::class.simpleName}")
-        
+
         when (currentState) {
+            is BubbleState.MenuExpanded -> {
+                bubbleStateMachine.dispatch(BubbleEvent.CloseMenu)
+            }
             is BubbleState.MultiPageCapture -> {
-                // 多页截图模式下，单击截图
                 capturePage()
             }
             is BubbleState.MultiPageCapturing -> {
-                // 正在截图中，忽略单击
                 AppDebugLogStore.i(tag, "handleSingleTap ignored, capturing in progress")
             }
             is BubbleState.MultiPageCaptureSuccess -> {
-                // 截图成功显示中，忽略单击
                 AppDebugLogStore.i(tag, "handleSingleTap ignored, showing capture success")
             }
             is BubbleState.Copied -> {
-                // 已复制状态下，单击重置
+                bubbleStateMachine.dispatch(BubbleEvent.SingleTap)
+            }
+            is BubbleState.Error -> {
                 bubbleStateMachine.dispatch(BubbleEvent.SingleTap)
             }
             else -> {
-                // 其他状态（Idle、ShowingLetters、Processing 等），打开裁剪页面
                 openCropSheet()
             }
         }
     }
 
     /**
-     * 处理长按事件（根据当前状态决定行为）
+     * 处理长按事件
+     * - 多图模式下：发送已截图片
+     * - Idle/ShowingLetters/Copied/Error：进入多图截图模式
+     * - Processing 等：展开扇形菜单
      */
-    fun handleLongPress() {
+    fun handleLongPress(anchorX: Int = 0, anchorY: Int = 0) {
         val currentState = bubbleStateMachine.currentState
-        val launchMode = _uiState.value.launchMode
-        AppDebugLogStore.i(tag, "handleLongPress state=${currentState::class.simpleName} launchMode=$launchMode")
-        
-        when {
-            // 普通模式下长按，打开主页面
-            launchMode == OverlayLaunchMode.NORMAL -> {
-                `fun`.kirari.hanako.overlay.openMainActivity(appContext)
-            }
-            // 自动模式下，Idle 或 ShowingLetters 状态长按，进入多页截图模式
-            launchMode == OverlayLaunchMode.AUTO && (currentState is BubbleState.Idle || currentState is BubbleState.ShowingLetters) -> {
-                enterMultiPageCaptureMode()
-            }
-            // 多页截图模式下，长按发送截图
-            currentState is BubbleState.MultiPageCapture -> {
-                AppDebugLogStore.i(tag, "handleLongPress MultiPageCapture bitmaps=${currentState.capturedBitmaps.size}")
+        AppDebugLogStore.i(tag, "handleLongPress state=${currentState::class.simpleName} anchor=($anchorX,$anchorY)")
+
+        when (currentState) {
+            is BubbleState.MultiPageCapture -> {
                 if (currentState.capturedBitmaps.isNotEmpty()) {
                     sendCaptures()
                 }
             }
-            currentState is BubbleState.MultiPageCapturing -> {
+            is BubbleState.MultiPageCapturing -> {
                 AppDebugLogStore.i(tag, "handleLongPress ignored, capturing in progress")
             }
-            currentState is BubbleState.MultiPageCaptureSuccess -> {
-                AppDebugLogStore.i(tag, "handleLongPress MultiPageCaptureSuccess bitmaps=${currentState.capturedBitmaps.size}")
+            is BubbleState.MultiPageCaptureSuccess -> {
                 if (currentState.capturedBitmaps.isNotEmpty()) {
                     sendCaptures()
                 }
+            }
+            is BubbleState.MenuExpanded -> {
+                bubbleStateMachine.dispatch(BubbleEvent.CloseMenu)
+            }
+            is BubbleState.Idle, is BubbleState.ShowingLetters,
+            is BubbleState.Copied, is BubbleState.Error -> {
+                enterMultiPageCaptureMode()
+            }
+            else -> {
+                // Processing 等状态长按展开菜单
+                bubbleStateMachine.dispatch(BubbleEvent.LongPress(anchorX, anchorY))
             }
         }
     }
 
     /**
      * 处理双击事件
+     * - 多图模式：退出多图
+     * - Processing：取消处理
+     * - Idle/ShowingLetters/Copied/Error：展开扇形菜单
      */
-    fun handleDoubleTap() {
+    fun handleDoubleTap(anchorX: Int = 0, anchorY: Int = 0) {
         val currentState = bubbleStateMachine.currentState
         AppDebugLogStore.i(tag, "handleDoubleTap state=${currentState::class.simpleName}")
-        
+
         when (currentState) {
             is BubbleState.MultiPageCapture,
             is BubbleState.MultiPageCapturing,
@@ -381,7 +388,57 @@ internal class OverlayViewModel(
             is BubbleState.Processing -> {
                 autoProcessingController.cancelActiveProcessing()
             }
+            is BubbleState.Idle,
+            is BubbleState.ShowingLetters,
+            is BubbleState.Copied,
+            is BubbleState.Error -> {
+                bubbleStateMachine.dispatch(BubbleEvent.LongPress(anchorX, anchorY))
+            }
+            is BubbleState.MenuExpanded -> {
+                bubbleStateMachine.dispatch(BubbleEvent.CloseMenu)
+            }
             else -> {}
+        }
+    }
+
+    /**
+     * 菜单关闭后的回调
+     */
+    fun onMenuDismissed() {
+        val currentState = bubbleStateMachine.currentState
+        if (currentState is BubbleState.MenuExpanded) {
+            bubbleStateMachine.dispatch(BubbleEvent.CloseMenu)
+        }
+    }
+
+    /**
+     * 处理菜单项点击
+     */
+    fun handleMenuSelect(item: BubbleMenuItem) {
+        AppDebugLogStore.i(tag, "handleMenuSelect item=$item")
+        when (item) {
+            BubbleMenuItem.ToggleRoute -> toggleProcessingRoute()
+            BubbleMenuItem.ToggleSearch -> toggleWebSearch()
+            BubbleMenuItem.Settings -> {
+                `fun`.kirari.hanako.overlay.openMainActivity(appContext)
+            }
+            BubbleMenuItem.VoiceRecognition -> {
+                // 语音功能暂未实现
+            }
+        }
+        // 不在此处 dispatch CloseMenu。
+        // 状态恢复统一由退场动画结束后的 onMenuDismissed() 处理，
+        // 否则 Compose 会立刻移除 BubbleMenu 导致退场动画被取消、
+        // overlay 窗口残留拦截触摸事件。
+    }
+
+    fun toggleWebSearch() {
+        viewModelScope.launch {
+            repository.update { current ->
+                current.copy(
+                    webSearch = current.webSearch.copy(enabled = !current.webSearch.enabled)
+                )
+            }
         }
     }
 
@@ -451,8 +508,15 @@ internal class OverlayViewModel(
                 error = message
             )
         }
+        // 进入 Error 状态显示错误图标，延迟后自动恢复 Idle
+        bubbleStateMachine.dispatch(BubbleEvent.ErrorOccurred(message))
         if (isAutoMode) {
-            bubbleStateMachine.forceState(BubbleState.Idle)
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(3000)
+                if (bubbleStateMachine.currentState is BubbleState.Error) {
+                    bubbleStateMachine.forceState(BubbleState.Idle)
+                }
+            }
         }
     }
 
@@ -472,7 +536,12 @@ internal class OverlayViewModel(
                     return OverlayViewModel(
                         appContext = appContext,
                         repository = container.settingsRepository,
-                        pipeline = ProcessingPipeline(appContext, container.unifiedLLMClient, container.localOcrManager),
+                        pipeline = ProcessingPipeline(
+                            appContext = appContext,
+                            unifiedClient = container.unifiedLLMClient,
+                            localOcrManager = container.localOcrManager,
+                            searchOrchestrator = container.searchOrchestrator
+                        ),
                         providerModelsApi = container.providerModelsApi
                     ) as T
                 }

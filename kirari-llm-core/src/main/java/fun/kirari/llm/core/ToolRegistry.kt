@@ -19,7 +19,7 @@ object ToolRegistry {
         ToolDef(
             name = "show_bubble_letters",
             description = "在悬浮球上展示选项字母",
-            params = listOf(ToolParam("text", "string", "1到4个大写英文字母", pattern = "^[A-Z]{1,4}$"))
+            params = listOf(ToolParam("text", "string", "1-8个英文字母（大小写均可），或对、错、√、×", pattern = "^[A-Za-z]{1,8}$|^(对|错|√|×)$"))
         )
     )
 
