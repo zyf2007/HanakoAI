@@ -295,6 +295,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun handleKirariRedirect(uri: Uri) {
         if (!kirariAuthManager.matchesRedirect(uri)) return
         viewModelScope.launch {
+            if (!kirariAuthManager.hasPendingAuthorizationSession()) {
+                AppDebugLogStore.i(tag, "ignoreKirariRedirect reason=no_pending_session")
+                return@launch
+            }
             val result = runCatching {
                 val latestSettings = settingsStore.read()
                 AppDebugLogStore.i(tag, "handleKirariRedirect serverUrl=${latestSettings.kirari.serverUrl}")
@@ -310,7 +314,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             _kirariAuthMessage.value = result.message
-            syncKirariSessionStatus(force = true)
+            if (result.success) {
+                syncKirariSessionStatus(force = true)
+            } else {
+                updateKirariAccountState()
+            }
         }
     }
 
@@ -359,20 +367,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _connectionTestState.value = ConnectionTestState(status = ConnectionTestStatus.TESTING)
         connectionTestJob = viewModelScope.launch {
             val trustAll = settings.value.trustAllHttpsCertificates
-            val result = providerModelsApi.testConnection(provider, trustAll)
-            if (!isActive) return@launch
-            _connectionTestState.value = if (result.success) {
-                ConnectionTestState(
-                    status = ConnectionTestStatus.SUCCESS,
-                    latencyMs = result.latencyMs
-                )
-            } else {
-                ConnectionTestState(
-                    status = ConnectionTestStatus.FAILED,
-                    latencyMs = result.latencyMs,
-                    errorMessage = result.errorMessage
-                )
+            val result = runCatching {
+                providerModelsApi.testConnection(provider, trustAll)
             }
+            if (!isActive) return@launch
+            _connectionTestState.value = result.fold(
+                onSuccess = { testResult ->
+                    if (testResult.success) {
+                        ConnectionTestState(
+                            status = ConnectionTestStatus.SUCCESS,
+                            latencyMs = testResult.latencyMs
+                        )
+                    } else {
+                        ConnectionTestState(
+                            status = ConnectionTestStatus.FAILED,
+                            latencyMs = testResult.latencyMs,
+                            errorMessage = testResult.errorMessage
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    val message = when (error.message) {
+                        "请先登录 The Kirari Network" -> "请先登录"
+                        else -> error.message ?: "连接测试失败"
+                    }
+                    ConnectionTestState(
+                        status = ConnectionTestStatus.FAILED,
+                        errorMessage = message
+                    )
+                }
+            )
         }
     }
 

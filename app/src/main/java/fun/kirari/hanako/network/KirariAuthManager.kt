@@ -113,6 +113,10 @@ internal class KirariAuthManager(
         KirariAuthHandleResult(true, "Kirari 登录成功")
     }
 
+    suspend fun hasPendingAuthorizationSession(): Boolean = withContext(Dispatchers.IO) {
+        pendingSession != null || settingsStore.readPendingKirariAuthorizationSession() != null
+    }
+
     suspend fun ensureValidAccessToken(
         settings: AppSettings,
         trustAllHttpsCertificates: Boolean

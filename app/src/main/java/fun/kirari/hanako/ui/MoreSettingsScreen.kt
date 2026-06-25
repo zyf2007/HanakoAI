@@ -46,6 +46,7 @@ import `fun`.kirari.hanako.data.KirariSettings
 import `fun`.kirari.hanako.data.ScreenCaptureMethod
 import `fun`.kirari.hanako.data.description
 import `fun`.kirari.hanako.data.displayName
+import `fun`.kirari.hanako.ui.components.DraftOutlinedTextField
 
 @Composable
 fun MoreSettingsScreen(
@@ -66,9 +67,6 @@ fun MoreSettingsScreen(
 ) {
     var timeoutInput by remember(automationSettings.autoModeTimeoutSeconds) {
         mutableStateOf(automationSettings.autoModeTimeoutSeconds.toString())
-    }
-    var kirariServerInput by remember(kirariSettings.serverUrl) {
-        mutableStateOf(kirariSettings.serverUrl)
     }
 
     LazyColumn(
@@ -127,11 +125,7 @@ fun MoreSettingsScreen(
                     KirariSettingsCard(
                         kirariSettings = kirariSettings,
                         hasKirariClientId = hasKirariClientId,
-                        serverUrlInput = kirariServerInput,
-                        onServerUrlInputChange = {
-                            kirariServerInput = it
-                            onUpdateKirariServerUrl(it)
-                        },
+                        onServerUrlCommit = onUpdateKirariServerUrl,
                         onLogin = onLoginKirari,
                         onLogout = onLogoutKirari
                     )
@@ -184,8 +178,7 @@ private fun AutoModeSettingsCard(
 private fun KirariSettingsCard(
     kirariSettings: KirariSettings,
     hasKirariClientId: Boolean,
-    serverUrlInput: String,
-    onServerUrlInputChange: (String) -> Unit,
+    onServerUrlCommit: (String) -> Unit,
     onLogin: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -202,12 +195,12 @@ private fun KirariSettingsCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (BuildConfig.KIRARI_SERVER_URL_EDITABLE) {
-            OutlinedTextField(
-                value = serverUrlInput,
-                onValueChange = onServerUrlInputChange,
+            DraftOutlinedTextField(
+                fieldKey = "kirari_server_url",
+                value = kirariSettings.serverUrl,
+                onCommit = onServerUrlCommit,
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Kirari 服务器地址") }
+                label = "Kirari 服务器地址"
             )
         } else {
             Surface(
