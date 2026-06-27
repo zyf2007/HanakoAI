@@ -15,6 +15,8 @@ internal val markdownParser by lazy {
     MarkdownParser(markdownFlavor)
 }
 
+private fun String.normalizeMarkdownNewlines(): String = replace("\r\n", "\n").replace('\r', '\n')
+
 internal val inlineLatexRegex = Regex("""\\\((.+?)\\\)""", RegexOption.DOT_MATCHES_ALL)
 internal val blockLatexRegex = Regex("""[ \t]*\\\[(.+?)\\\][ \t]*""", RegexOption.DOT_MATCHES_ALL)
 internal val escapedDollarBlockDelimiterRegex = Regex("""(?m)^([ \t]*)\\\$\\\$[ \t]*$""")
@@ -55,7 +57,8 @@ private fun replaceCopyMarkers(content: String): Pair<String, List<CopyMarkerTok
 }
 
 internal fun preprocessMarkdown(content: String): Pair<String, List<CopyMarkerToken>> {
-    val (copyPreprocessed, copyMarkers) = replaceCopyMarkers(content)
+    val normalizedContent = content.normalizeMarkdownNewlines()
+    val (copyPreprocessed, copyMarkers) = replaceCopyMarkers(normalizedContent)
     val codeBlocks = codeRangesIn(copyPreprocessed)
 
     fun inCodeBlock(index: Int): Boolean = codeBlocks.any { index in it }

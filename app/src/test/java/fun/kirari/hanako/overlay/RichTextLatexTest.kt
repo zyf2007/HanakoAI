@@ -110,4 +110,56 @@ class RichTextLatexTest {
         )
         assertNotNull(result.astTree.findChildRecursive(GFMElementTypes.BLOCK_MATH))
     }
+
+    @Test
+    fun preprocessMarkdown_supportsCrLfDollarBlockMath() {
+        val source = "先计算\r\n$$\r\nx^2 + y^2 = z^2\r\n$$\r\n再继续"
+
+        val result = parseMarkdown(source)
+
+        assertEquals(
+            """
+                先计算
+                $$
+                x^2 + y^2 = z^2
+                $$
+                再继续
+            """.trimIndent(),
+            result.preprocessed
+        )
+        assertNotNull(result.astTree.findChildRecursive(GFMElementTypes.BLOCK_MATH))
+    }
+
+    @Test
+    fun preprocessMarkdown_turnsBracketBlockMathIntoDollarBlockMathWithNormalizedNewlines() {
+        val source = """
+            好的，我们先分析这道题。题目给了两个三维向量，要求计算叉积的结果。我来一步步处理。  
+
+            **第一步：计算需要的向量**
+
+            题目给出：
+            \[
+            \vec{a} = (1, 0, 1),\quad \vec{b} = (0, 1, 1)
+            \]
+        """.trimIndent().replace("\n", "\r\n")
+
+        val result = parseMarkdown(source)
+
+        assertEquals(
+            """
+                好的，我们先分析这道题。题目给了两个三维向量，要求计算叉积的结果。我来一步步处理。  
+                
+                **第一步：计算需要的向量**
+                
+                题目给出：
+                
+                $$
+                \vec{a} = (1, 0, 1),\quad \vec{b} = (0, 1, 1)
+                $$
+                
+            """.trimIndent(),
+            result.preprocessed
+        )
+        assertNotNull(result.astTree.findChildRecursive(GFMElementTypes.BLOCK_MATH))
+    }
 }
