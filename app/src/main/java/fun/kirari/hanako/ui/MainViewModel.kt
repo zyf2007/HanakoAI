@@ -336,6 +336,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun logoutKirari() {
         viewModelScope.launch {
             kirariAuthManager.clearAuth()
+            providerMetaJob?.cancel()
+            _providerMetaState.value = ProviderMetaState()
             updateKirariAccountState()
             _kirariAuthMessage.value = "已退出 The Kirari Network"
         }
