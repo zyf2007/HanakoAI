@@ -28,6 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.data.AppSettings
 import `fun`.kirari.hanako.data.KIRARI_PROVIDER_ID
@@ -103,9 +106,12 @@ fun ProviderDetailScreen(
     onClearConnectionTest: () -> Unit,
     onLoadProviderMeta: (ModelProviderConfig) -> Unit,
     onClearProviderMeta: () -> Unit,
+    shouldSuggestKirariAutoSetup: Boolean,
+    onApplyKirariAutoSetup: () -> Unit,
     onLoginKirari: () -> Unit,
     onLogoutKirari: () -> Unit
 ) {
+    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(provider.id) {
         onDispose {
             onClearConnectionTest()
@@ -117,6 +123,21 @@ fun ProviderDetailScreen(
             onLoadProviderMeta(provider)
         }
     }
+    DisposableEffect(lifecycleOwner, provider.id) {
+        if (provider.id != KIRARI_PROVIDER_ID) {
+            onDispose { }
+        } else {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    onLoadProviderMeta(provider)
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+            }
+        }
+    }
 
     if (provider.id == KIRARI_PROVIDER_ID) {
         KirariProviderDetailScreen(
@@ -125,6 +146,8 @@ fun ProviderDetailScreen(
             kirariAccountState = kirariAccountState,
             connectionTestState = connectionTestState,
             hasKirariClientId = hasKirariClientId,
+            shouldSuggestAutoSetup = shouldSuggestKirariAutoSetup,
+            onApplyAutoSetup = onApplyKirariAutoSetup,
             onViewModels = onViewModels,
             onTestConnection = onTestConnection,
             onLoginKirari = onLoginKirari,

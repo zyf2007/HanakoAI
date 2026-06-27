@@ -23,12 +23,15 @@ import `fun`.kirari.hanako.data.LOCAL_OCR_MODEL_ID
 import `fun`.kirari.hanako.data.LOCAL_OCR_PROVIDER_ID
 import `fun`.kirari.hanako.data.modelSelectionFor
 import `fun`.kirari.hanako.data.KIRARI_PROVIDER_ID
+import `fun`.kirari.hanako.data.KirariModelTag
 import `fun`.kirari.hanako.data.KirariSettings
 import `fun`.kirari.hanako.data.availableProviders
 import `fun`.kirari.hanako.localocr.LocalOcrManager
 import `fun`.kirari.hanako.network.ProviderModelsApi
 import `fun`.kirari.hanako.network.KirariAuthHandleResult
+import `fun`.kirari.hanako.data.toKirariModelTag
 import `fun`.kirari.llm.core.ProviderUsageSummary
+import `fun`.kirari.llm.core.RemoteModelOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +56,7 @@ data class ConnectionTestState(
 
 data class ProviderMetaState(
     val loading: Boolean = false,
+    val models: List<RemoteModelOption> = emptyList(),
     val usageSummary: ProviderUsageSummary? = null,
     val errorMessage: String? = null
 )
@@ -88,6 +92,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _kirariAccountState = MutableStateFlow(KirariAccountState())
     val kirariAccountState: StateFlow<KirariAccountState> = _kirariAccountState.asStateFlow()
     private var kirariAccountJob: Job? = null
+    private val _kirariRedirectTarget = MutableStateFlow<String?>(null)
+    val kirariRedirectTarget: StateFlow<String?> = _kirariRedirectTarget.asStateFlow()
 
     val settings: StateFlow<AppSettings> = repository.settings.stateIn(
         scope = viewModelScope,
@@ -316,10 +322,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _kirariAuthMessage.value = result.message
             if (result.success) {
                 syncKirariSessionStatus(force = true)
+                _kirariRedirectTarget.value = providerDetailRoute(KIRARI_PROVIDER_ID)
             } else {
                 updateKirariAccountState()
             }
         }
+    }
+
+    fun consumeKirariRedirectTarget() {
+        _kirariRedirectTarget.value = null
     }
 
     fun logoutKirari() {
@@ -431,6 +442,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 onSuccess = { catalog ->
                     ProviderMetaState(
                         loading = false,
+                        models = catalog.models,
                         usageSummary = catalog.usageSummary
                     )
                 },
@@ -451,6 +463,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         providerMetaJob?.cancel()
         providerMetaJob = null
         _providerMetaState.value = ProviderMetaState()
+    }
+
+    fun shouldSuggestKirariAutoSetup(settings: AppSettings, providerMetaState: ProviderMetaState): Boolean {
+        val expected = expectedKirariSelections(providerMetaState.models)
+        if (expected.size != 3) {
+            return false
+        }
+        return expected.any { (purpose, selection) -> settings.modelSelectionFor(purpose) != selection }
+    }
+
+    fun applyKirariAutoSetup() {
+        val expected = expectedKirariSelections(providerMetaState.value.models)
+        if (expected.size != 3) {
+            return
+        }
+        viewModelScope.launch {
+            repository.update { current ->
+                current.copy(
+                    textModelSelection = expected[ModelPurpose.TEXT] ?: current.textModelSelection,
+                    ocrModelSelection = expected[ModelPurpose.OCR] ?: current.ocrModelSelection,
+                    visionModelSelection = expected[ModelPurpose.VISION] ?: current.visionModelSelection
+                )
+            }
+        }
     }
 
     fun clearDebugLogs() {
@@ -531,5 +567,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             fallbackProvider != null -> selection.copy(providerId = fallbackProvider.id)
             else -> selection.copy(providerId = null, model = "")
         }
+    }
+
+    private fun expectedKirariSelections(models: List<RemoteModelOption>): Map<ModelPurpose, ModelSelection> {
+        val byTag = models.mapNotNull { option ->
+            option.tag?.toKirariModelTag()?.let { tag -> tag to option }
+        }.toMap()
+        val expected = linkedMapOf<ModelPurpose, ModelSelection>()
+        byTag[KirariModelTag.TEXT]?.let { expected[ModelPurpose.TEXT] = ModelSelection(KIRARI_PROVIDER_ID, it.id) }
+        byTag[KirariModelTag.OCR]?.let { expected[ModelPurpose.OCR] = ModelSelection(KIRARI_PROVIDER_ID, it.id) }
+        byTag[KirariModelTag.MULTIMODAL]?.let { expected[ModelPurpose.VISION] = ModelSelection(KIRARI_PROVIDER_ID, it.id) }
+        if (expected.size != 3) {
+            return emptyMap()
+        }
+        return expected
     }
 }

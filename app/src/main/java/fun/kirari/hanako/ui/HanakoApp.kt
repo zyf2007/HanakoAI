@@ -64,6 +64,7 @@ fun HanakoApp(viewModel: MainViewModel) {
     val settings by viewModel.settings.collectAsState()
     val debugEntries by AppDebugLogStore.entries.collectAsState()
     val kirariAuthMessage by viewModel.kirariAuthMessage.collectAsState()
+    val kirariRedirectTarget by viewModel.kirariRedirectTarget.collectAsState()
     val context = LocalContext.current
     val overlayEnabled by OverlayRuntimeState.running.collectAsState()
     var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
@@ -80,6 +81,16 @@ fun HanakoApp(viewModel: MainViewModel) {
         val message = kirariAuthMessage ?: return@LaunchedEffect
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         viewModel.consumeKirariAuthMessage()
+    }
+
+    LaunchedEffect(kirariRedirectTarget) {
+        val route = kirariRedirectTarget ?: return@LaunchedEffect
+        currentScreen = Screen.Settings
+        navController.navigate(route) {
+            launchSingleTop = true
+            restoreState = true
+        }
+        viewModel.consumeKirariRedirectTarget()
     }
 
     DisposableEffect(lifecycleOwner, context) {
@@ -275,6 +286,8 @@ fun HanakoApp(viewModel: MainViewModel) {
                             onClearConnectionTest = viewModel::resetConnectionTest,
                             onLoadProviderMeta = viewModel::loadProviderMeta,
                             onClearProviderMeta = viewModel::resetProviderMeta,
+                            shouldSuggestKirariAutoSetup = viewModel.shouldSuggestKirariAutoSetup(settings, providerMetaState),
+                            onApplyKirariAutoSetup = viewModel::applyKirariAutoSetup,
                             onLoginKirari = {
                                 viewModel.startKirariLogin { authorizationUrl ->
                                     context.startActivity(

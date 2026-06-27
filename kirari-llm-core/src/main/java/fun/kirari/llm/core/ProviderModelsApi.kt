@@ -12,7 +12,8 @@ import okhttp3.Request
 data class RemoteModelOption(
     val id: String,
     val displayName: String = id,
-    val pricePerTokenCredits: Double? = null
+    val pricePerTokenCredits: Double? = null,
+    val tag: String? = null
 )
 
 data class ConnectionTestResult(
@@ -163,16 +164,19 @@ class ProviderModelsApi(
         return ProviderCatalog(
             models = models.mapNotNull { element ->
                 val modelObject = element.jsonObject
-                val id = modelObject["model_ref"]?.jsonPrimitive?.contentOrNull
+                val id = modelObject["name"]?.jsonPrimitive?.contentOrNull
+                    ?: modelObject["model_ref"]?.jsonPrimitive?.contentOrNull
                     ?: modelObject["id"]?.jsonPrimitive?.contentOrNull
                     ?: return@mapNotNull null
                 val display = modelObject["display_name"]?.jsonPrimitive?.contentOrNull
+                    ?: modelObject["name"]?.jsonPrimitive?.contentOrNull
                     ?: modelObject["model_name"]?.jsonPrimitive?.contentOrNull
                     ?: id
                 RemoteModelOption(
                     id = id,
                     displayName = display,
-                    pricePerTokenCredits = modelObject["price_per_token_credits"]?.jsonPrimitive?.doubleOrNull
+                    pricePerTokenCredits = modelObject["price_per_token_credits"]?.jsonPrimitive?.doubleOrNull,
+                    tag = modelObject["model_tag"]?.jsonPrimitive?.contentOrNull
                 )
             },
             usageSummary = usageSummary

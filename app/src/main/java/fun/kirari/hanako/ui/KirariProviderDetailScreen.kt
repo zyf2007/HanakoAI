@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,6 +63,8 @@ fun KirariProviderDetailScreen(
     kirariAccountState: KirariAccountState,
     connectionTestState: ConnectionTestState,
     hasKirariClientId: Boolean,
+    shouldSuggestAutoSetup: Boolean,
+    onApplyAutoSetup: () -> Unit,
     onViewModels: () -> Unit,
     onTestConnection: (ModelProviderConfig) -> Unit,
     onLoginKirari: () -> Unit,
@@ -90,7 +93,11 @@ fun KirariProviderDetailScreen(
 
             // 2. 全页唯一高光卡片：额度仪表盘
             item {
-                MasterQuotaCard(state = providerMetaState)
+                MasterQuotaCard(
+                    state = providerMetaState,
+                    shouldSuggestAutoSetup = shouldSuggestAutoSetup,
+                    onApplyAutoSetup = onApplyAutoSetup
+                )
             }
 
             // 3. 纵向规整参数表（替代原本的田字格）
@@ -194,7 +201,11 @@ private fun AccountHeroHeader(
 // 2. 额度主卡片 (Master Quota Card)
 // ============================================================================
 @Composable
-private fun MasterQuotaCard(state: ProviderMetaState) {
+private fun MasterQuotaCard(
+    state: ProviderMetaState,
+    shouldSuggestAutoSetup: Boolean,
+    onApplyAutoSetup: () -> Unit
+) {
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow, // 极净单层背景
@@ -261,11 +272,70 @@ private fun MasterQuotaCard(state: ProviderMetaState) {
                             Text("已消耗: ${used.formatCompactNumber()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("计费状态正常", style = MaterialTheme.typography.labelSmall, color = Color(0xFF10B981), fontWeight = FontWeight.Medium)
                         }
+
+                        AnimatedVisibility(
+                            visible = shouldSuggestAutoSetup,
+                            enter = fadeIn(),
+                            exit = fadeOut()
+                        ) {
+                            AutoSetupCard(onApplyAutoSetup = onApplyAutoSetup)
+                        }
                     }
                 }
                 else -> {
                     Text("请登录账户以同步 API 额度数据。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AutoSetupCard(onApplyAutoSetup: () -> Unit) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkTheme = colorScheme.surface.luminance() < 0.5f
+    val backgroundBrush = if (isDarkTheme) {
+        Brush.linearGradient(
+            listOf(Color(0xFF0F172A), Color(0xFF123A5A), Color(0xFF154E63))
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(Color(0xFFE0F2FE), Color(0xFFECFEFF), Color(0xFFDCFCE7))
+        )
+    }
+    val titleColor = if (isDarkTheme) Color(0xFFF0F9FF) else Color(0xFF0F172A)
+    val bodyColor = if (isDarkTheme) Color(0xFFBAE6FD) else Color(0xFF164E63)
+    val buttonContainer = if (isDarkTheme) Color(0xFF38BDF8) else Color(0xFF0EA5E9)
+    val buttonContent = if (isDarkTheme) Color(0xFF082F49) else Color(0xFFF8FAFC)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(backgroundBrush)
+            .padding(18.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = "一键自动设置模型",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = titleColor
+            )
+            Text(
+                text = "自动配置为 The Kirari Network 推荐的模型组合。",
+                style = MaterialTheme.typography.bodySmall,
+                color = bodyColor
+            )
+            Button(
+                onClick = onApplyAutoSetup,
+                shape = RoundedCornerShape(99.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = buttonContainer,
+                    contentColor = buttonContent
+                )
+            ) {
+                Text("立即自动设置", fontWeight = FontWeight.Bold)
             }
         }
     }

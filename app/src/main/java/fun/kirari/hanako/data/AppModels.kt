@@ -26,6 +26,13 @@ enum class ModelPurpose {
     VISION
 }
 
+enum class KirariModelTag {
+    TEXT,
+    OCR,
+    MULTIMODAL,
+    FALLBACK
+}
+
 @Serializable
 data class ModelSelection(
     val providerId: String? = null,
@@ -412,3 +419,11 @@ private fun fallbackModelFrom(provider: ModelProviderConfig, fallbackModel: Stri
 }
 
 fun ModelSelection.isLocalOcrSelection(): Boolean = providerId == LOCAL_OCR_PROVIDER_ID
+
+fun String.toKirariModelTag(): KirariModelTag? = when (trim().lowercase()) {
+    "text" -> KirariModelTag.TEXT
+    "ocr" -> KirariModelTag.OCR
+    "multimodal" -> KirariModelTag.MULTIMODAL
+    "fallback" -> KirariModelTag.FALLBACK
+    else -> null
+}
