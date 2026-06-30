@@ -1,6 +1,7 @@
 package `fun`.kirari.hanako.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,10 +13,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Adjust
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SmartToy
@@ -24,29 +28,53 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.BuildConfig
 import `fun`.kirari.hanako.data.AutomationSettings
+import `fun`.kirari.hanako.data.BubbleAppearanceSettings
+import `fun`.kirari.hanako.data.DEFAULT_BUBBLE_DIAMETER_DP
+import `fun`.kirari.hanako.data.DEFAULT_BUBBLE_OPACITY
+import `fun`.kirari.hanako.data.DEFAULT_SPINNER_DIAMETER_DP
 import `fun`.kirari.hanako.data.KirariSettings
+import `fun`.kirari.hanako.data.MAX_BUBBLE_DIAMETER_DP
+import `fun`.kirari.hanako.data.MAX_SPINNER_DIAMETER_DP
+import `fun`.kirari.hanako.data.MIN_BUBBLE_DIAMETER_DP
+import `fun`.kirari.hanako.data.MIN_SPINNER_DIAMETER_DP
 import `fun`.kirari.hanako.data.ScreenCaptureMethod
 import `fun`.kirari.hanako.data.description
 import `fun`.kirari.hanako.data.displayName
 import `fun`.kirari.hanako.ui.components.DraftOutlinedTextField
+import kotlinx.coroutines.delay
 
 @Composable
 fun MoreSettingsScreen(
@@ -58,6 +86,7 @@ fun MoreSettingsScreen(
     onToggleCompletionNotification: (Boolean) -> Unit,
     onToggleStaticMode: (Boolean) -> Unit,
     onNavigateStaticVibrationSettings: () -> Unit,
+    onUpdateAutomationSettings: (AutomationSettings) -> Unit,
     onUpdateTimeoutSeconds: (Int) -> Unit,
     onSelectMethod: (ScreenCaptureMethod) -> Unit,
     onToggleTrustAllHttpsCertificates: (Boolean) -> Unit,
@@ -74,6 +103,29 @@ fun MoreSettingsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            MoreSettingCard(
+                icon = Icons.Default.Adjust,
+                title = "悬浮球外观",
+                subtitle = "调整悬浮球的尺寸与透明度。",
+                trailing = {
+                    BubbleAppearanceResetButton(
+                        onReset = {
+                            onUpdateAutomationSettings(
+                                automationSettings.copy(bubbleAppearance = BubbleAppearanceSettings())
+                            )
+                        }
+                    )
+                }
+            ) {
+                BubbleAppearanceSettingsCard(
+                    settings = automationSettings.bubbleAppearance,
+                    onChange = { bubbleAppearance ->
+                        onUpdateAutomationSettings(automationSettings.copy(bubbleAppearance = bubbleAppearance))
+                    }
+                )
+            }
+        }
         item {
             MoreSettingCard(
                 icon = Icons.Default.SmartToy,
@@ -137,6 +189,15 @@ fun MoreSettingsScreen(
 }
 
 @Composable
+private fun BubbleAppearanceResetButton(
+    onReset: () -> Unit
+) {
+    OutlinedButton(onClick = onReset) {
+        Text("重置")
+    }
+}
+
+@Composable
 private fun AutoModeSettingsCard(
     automationSettings: AutomationSettings,
     timeoutInput: String,
@@ -170,6 +231,52 @@ private fun AutoModeSettingsCard(
                 onTimeoutInputChange(digits)
                 digits.toIntOrNull()?.takeIf { it > 0 }?.let(onUpdateTimeoutSeconds)
             }
+        )
+    }
+}
+
+@Composable
+private fun BubbleAppearanceSettingsCard(
+    settings: BubbleAppearanceSettings,
+    onChange: (BubbleAppearanceSettings) -> Unit
+) {
+    var draftSettings by remember(settings) { mutableStateOf(settings) }
+
+    LaunchedEffect(draftSettings) {
+        if (draftSettings != settings) {
+            delay(180)
+            onChange(draftSettings)
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        BubblePreview(settings = draftSettings)
+        SliderSettingRow(
+            title = "悬浮球直径",
+            value = draftSettings.bubbleDiameterDp,
+            range = MIN_BUBBLE_DIAMETER_DP..MAX_BUBBLE_DIAMETER_DP,
+            valueText = draftSettings.bubbleDiameterDp.toInt().toString(),
+            onValueChange = { draftSettings = draftSettings.copy(bubbleDiameterDp = it) },
+            onValueChangeFinished = { onChange(draftSettings) }
+        )
+        SliderSettingRow(
+            title = "加载动画直径",
+            value = draftSettings.spinnerDiameterDp,
+            range = MIN_SPINNER_DIAMETER_DP..MAX_SPINNER_DIAMETER_DP,
+            valueText = draftSettings.spinnerDiameterDp.toInt().toString(),
+            onValueChange = { draftSettings = draftSettings.copy(spinnerDiameterDp = it) },
+            onValueChangeFinished = { onChange(draftSettings) }
+        )
+        SliderSettingRow(
+            title = "整体透明度",
+            value = draftSettings.overallOpacity,
+            range = 0f..100f,
+            valueText = draftSettings.overallOpacity.toInt().toString(),
+            onValueChange = { draftSettings = draftSettings.copy(overallOpacity = it) },
+            onValueChangeFinished = { onChange(draftSettings) }
         )
     }
 }
@@ -390,10 +497,160 @@ private fun TimeoutField(
 }
 
 @Composable
+private fun SliderSettingRow(
+    title: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    valueText: String,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = range,
+            onValueChangeFinished = onValueChangeFinished
+        )
+    }
+}
+
+@Composable
+private fun BubblePreview(settings: BubbleAppearanceSettings) {
+    val bubbleDiameter = settings.bubbleDiameterDp.dp
+    val spinnerDiameter = settings.spinnerDiameterDp.dp
+    val overallAlpha = (settings.overallOpacity / 100f).coerceIn(0f, 1f)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "预览",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
+            ) {
+                SpinnerRing(
+                    size = spinnerDiameter,
+                    color = Color(0xFF6750A4),
+                    alpha = overallAlpha
+                )
+                BubbleCircle(
+                    size = bubbleDiameter,
+                    alpha = overallAlpha,
+                    shape = RoundedCornerShape(percent = 50)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SmartToy,
+                        contentDescription = null,
+                        tint = Color(0xFF4F378B),
+                        modifier = Modifier.size((settings.bubbleDiameterDp * 0.45f).dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpinnerRing(
+    size: Dp,
+    color: Color,
+    alpha: Float
+) {
+    val transition = rememberInfiniteTransition(label = "bubble_preview_spinner")
+    val rotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "bubble_preview_spinner_rotation"
+    )
+    Box(
+        modifier = Modifier
+            .size(size)
+            .graphicsLayer { rotationZ = rotation - 90f }
+            .alpha(alpha),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.fillMaxSize(),
+            progress = { 0.72f },
+            color = color,
+            strokeWidth = 3.dp,
+            trackColor = Color.Transparent
+        )
+    }
+}
+
+@Composable
+private fun BubbleCircle(
+    size: Dp,
+    alpha: Float,
+    shape: Shape,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .size(size)
+            .alpha(alpha),
+        shape = shape,
+        color = Color(0xFFEADDFF)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+            content = content
+        )
+    }
+}
+
+@Composable
 private fun MoreSettingCard(
     icon: ImageVector,
     title: String,
     subtitle: String,
+    trailing: @Composable (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     Surface(
@@ -407,6 +664,7 @@ private fun MoreSettingCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -416,7 +674,10 @@ private fun MoreSettingCard(
                     modifier = Modifier.size(22.dp),
                     tint = MaterialTheme.colorScheme.primary
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
                         title,
                         style = MaterialTheme.typography.titleSmall,
@@ -428,6 +689,7 @@ private fun MoreSettingCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                trailing?.invoke()
             }
             content()
         }

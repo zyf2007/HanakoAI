@@ -19,6 +19,7 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import `fun`.kirari.hanako.automation.BubbleRenderer
 import `fun`.kirari.hanako.automation.BubbleState
+import `fun`.kirari.hanako.data.BubbleAppearanceSettings
 import `fun`.kirari.hanako.debug.AppDebugLogStore
 import kotlin.math.roundToInt
 
@@ -29,7 +30,8 @@ internal class BubbleWindowController(
     private val onDoubleTap: () -> Unit,
     private val onLongPress: () -> Unit,
     private val onLongPressHaptic: () -> Unit,
-    private val isStaticModeEnabled: () -> Boolean
+    private val isStaticModeEnabled: () -> Boolean,
+    private val bubbleAppearanceSettings: () -> BubbleAppearanceSettings
 ) {
     private val logTag = "HanakoBubbleWindow"
     private var bubbleView: FrameLayout? = null
@@ -42,10 +44,11 @@ internal class BubbleWindowController(
     fun show() {
         if (bubbleView != null) return
         val density = context.resources.displayMetrics.density
-        val rootSizePx = (56f * density).roundToInt()
-        val surfaceSizePx = (40f * density).roundToInt()
-        val iconSizePx = (20f * density).roundToInt()
-        val spinnerSizePx = (54f * density).roundToInt()
+        val initialSettings = bubbleAppearanceSettings()
+        val rootSizePx = computeRootSizePx(initialSettings)
+        val surfaceSizePx = (initialSettings.bubbleDiameterDp * density).roundToInt()
+        val iconSizePx = (initialSettings.bubbleDiameterDp * density * 0.5f).roundToInt()
+        val spinnerSizePx = (initialSettings.spinnerDiameterDp * density).roundToInt()
         val params = WindowManager.LayoutParams(
             rootSizePx,
             rootSizePx,
@@ -95,15 +98,22 @@ internal class BubbleWindowController(
         val icon = iconView ?: return
         val text = textView
         val spinner = spinnerView
+        val settings = bubbleAppearanceSettings()
         val appearance = BubbleRenderer.render(
             state = bubbleState,
             launchMode = launchMode,
             context = context,
             staticModeEnabled = isStaticModeEnabled()
         )
+        val overallAlpha = (settings.overallOpacity / 100f).coerceIn(0f, 1f)
+        updateRootSize(settings)
         val bubbleLayoutParams = bubble.layoutParams as? FrameLayout.LayoutParams
         if (bubbleLayoutParams != null) {
-            val sizePx = (40f * context.resources.displayMetrics.density * appearance.sizeScale).roundToInt()
+            val sizePx = (
+                settings.bubbleDiameterDp *
+                    context.resources.displayMetrics.density *
+                    appearance.sizeScale
+                ).roundToInt()
             if (bubbleLayoutParams.width != sizePx || bubbleLayoutParams.height != sizePx) {
                 bubbleLayoutParams.width = sizePx
                 bubbleLayoutParams.height = sizePx
@@ -112,6 +122,7 @@ internal class BubbleWindowController(
                 bubble.requestLayout()
             }
         }
+        bubble.alpha = overallAlpha
 
         val existing = bubble.background as? GradientDrawable
         val drawable = existing ?: GradientDrawable().apply {
@@ -134,8 +145,8 @@ internal class BubbleWindowController(
             bubble.background = drawable
         }
 
-        updateIconAndText(icon, text, appearance)
-        updateSpinner(spinner, appearance)
+        updateIconAndText(icon, text, appearance, settings, overallAlpha)
+        updateSpinner(spinner, appearance, settings, overallAlpha)
     }
 
     fun destroy() {
@@ -250,8 +261,29 @@ internal class BubbleWindowController(
     private fun updateIconAndText(
         icon: ImageView,
         text: TextView?,
-        appearance: `fun`.kirari.hanako.automation.BubbleAppearance
+        appearance: `fun`.kirari.hanako.automation.BubbleAppearance,
+        settings: BubbleAppearanceSettings,
+        overallAlpha: Float
     ) {
+        val iconSizePx = (
+            settings.bubbleDiameterDp *
+                context.resources.displayMetrics.density *
+                0.5f *
+                appearance.sizeScale
+            ).roundToInt()
+        (icon.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+            if (params.width != iconSizePx || params.height != iconSizePx) {
+                params.width = iconSizePx
+                params.height = iconSizePx
+                params.gravity = Gravity.CENTER
+                icon.layoutParams = params
+            }
+        }
+        text?.apply {
+            val textSizeSp = (settings.bubbleDiameterDp * 0.4f * appearance.sizeScale).coerceAtLeast(12f)
+            this.textSize = textSizeSp
+            alpha = overallAlpha
+        }
         if (appearance.letters != null) {
             text?.text = appearance.letters
             text?.setTextColor(appearance.iconTint)
@@ -294,9 +326,21 @@ internal class BubbleWindowController(
 
     private fun updateSpinner(
         spinner: ProgressBar?,
-        appearance: `fun`.kirari.hanako.automation.BubbleAppearance
+        appearance: `fun`.kirari.hanako.automation.BubbleAppearance,
+        settings: BubbleAppearanceSettings,
+        overallAlpha: Float
     ) {
         spinner?.apply {
+            (layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+                val spinnerSizePx = (settings.spinnerDiameterDp * context.resources.displayMetrics.density).roundToInt()
+                if (params.width != spinnerSizePx || params.height != spinnerSizePx) {
+                    params.width = spinnerSizePx
+                    params.height = spinnerSizePx
+                    params.gravity = Gravity.CENTER
+                    layoutParams = params
+                    requestLayout()
+                }
+            }
             val drawable = indeterminateDrawable?.mutate()
             if (drawable != null) {
                 drawable.setColorFilter(appearance.spinnerColor, PorterDuff.Mode.SRC_IN)
@@ -306,9 +350,9 @@ internal class BubbleWindowController(
             if (appearance.showSpinner) {
                 visibility = View.VISIBLE
                 if (appearance.animateTransitions) {
-                    animate().alpha(1f).setDuration(160L).start()
+                    animate().alpha(overallAlpha).setDuration(160L).start()
                 } else {
-                    alpha = 1f
+                    alpha = overallAlpha
                 }
             } else {
                 if (appearance.animateTransitions) {
@@ -323,5 +367,22 @@ internal class BubbleWindowController(
                 }
             }
         }
+    }
+
+    private fun updateRootSize(settings: BubbleAppearanceSettings) {
+        val root = bubbleView ?: return
+        val params = root.layoutParams as? WindowManager.LayoutParams ?: return
+        val nextSize = computeRootSizePx(settings)
+        if (params.width == nextSize && params.height == nextSize) return
+        params.width = nextSize
+        params.height = nextSize
+        windowManager.updateViewLayout(root, params)
+    }
+
+    private fun computeRootSizePx(settings: BubbleAppearanceSettings): Int {
+        val density = context.resources.displayMetrics.density
+        val contentSizePx = maxOf(settings.bubbleDiameterDp, settings.spinnerDiameterDp) * density
+        val paddingPx = 16f * density
+        return (contentSizePx + paddingPx).roundToInt()
     }
 }

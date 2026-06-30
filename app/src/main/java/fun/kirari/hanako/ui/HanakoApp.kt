@@ -352,6 +352,9 @@ fun HanakoApp(viewModel: MainViewModel) {
                             }
                         },
                         onNavigateStaticVibrationSettings = { navController.navigate(ROUTE_SETTINGS_STATIC_VIBRATION) },
+                        onUpdateAutomationSettings = { automationSettings ->
+                            viewModel.updateAutomationSettings { automationSettings }
+                        },
                         onSelectMethod = viewModel::setScreenCaptureMethod,
                         onUpdateTimeoutSeconds = { seconds ->
                             viewModel.updateAutomationSettings {

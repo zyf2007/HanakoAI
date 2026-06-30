@@ -130,12 +130,28 @@ enum class ScreenCaptureMethod {
 }
 
 @Serializable
+data class BubbleAppearanceSettings(
+    val bubbleDiameterDp: Float = DEFAULT_BUBBLE_DIAMETER_DP,
+    val spinnerDiameterDp: Float = DEFAULT_SPINNER_DIAMETER_DP,
+    val overallOpacity: Float = DEFAULT_BUBBLE_OPACITY
+)
+
+const val DEFAULT_BUBBLE_DIAMETER_DP = 40f
+const val DEFAULT_SPINNER_DIAMETER_DP = 50f
+const val DEFAULT_BUBBLE_OPACITY = 100f
+const val MIN_BUBBLE_DIAMETER_DP = 0f
+const val MAX_BUBBLE_DIAMETER_DP = 70f
+const val MIN_SPINNER_DIAMETER_DP = 0f
+const val MAX_SPINNER_DIAMETER_DP = 70f
+
+@Serializable
 data class AutomationSettings(
     val completionNotificationEnabled: Boolean = true,
     val autoModeTimeoutSeconds: Int = 30,
     val staticModeEnabled: Boolean = false,
     val staticIntraLetterGapMs: Int = 400,
-    val staticInterLetterGapMs: Int = 1000
+    val staticInterLetterGapMs: Int = 1000,
+    val bubbleAppearance: BubbleAppearanceSettings = BubbleAppearanceSettings()
 )
 
 @Serializable
@@ -315,6 +331,7 @@ fun AppSettings.normalize(): AppSettings {
     val fallbackProvider = availableProviders.firstOrNull { it.id == selectedProviderId } ?: availableProviders.firstOrNull()
     return copy(
         providers = normalizedProviders,
+        automation = automation.normalize(),
         kirari = normalizedKirari,
         selectedProviderId = selectedProviderId
             ?.takeIf { candidate -> availableProviders.any { it.id == candidate } }
@@ -338,6 +355,21 @@ fun AppSettings.normalize(): AppSettings {
                 fallbackProvider.visionModel
             } ?: fallbackProvider?.visionModel.orEmpty()
         )
+    )
+}
+
+private fun AutomationSettings.normalize(): AutomationSettings {
+    return copy(
+        autoModeTimeoutSeconds = autoModeTimeoutSeconds.coerceAtLeast(1),
+        bubbleAppearance = bubbleAppearance.normalize()
+    )
+}
+
+private fun BubbleAppearanceSettings.normalize(): BubbleAppearanceSettings {
+    return copy(
+        bubbleDiameterDp = bubbleDiameterDp.coerceIn(MIN_BUBBLE_DIAMETER_DP, MAX_BUBBLE_DIAMETER_DP),
+        spinnerDiameterDp = spinnerDiameterDp.coerceIn(MIN_SPINNER_DIAMETER_DP, MAX_SPINNER_DIAMETER_DP),
+        overallOpacity = overallOpacity.coerceIn(0f, 100f)
     )
 }
 

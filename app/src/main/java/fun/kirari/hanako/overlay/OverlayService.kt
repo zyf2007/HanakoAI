@@ -66,6 +66,9 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                 onLongPressHaptic = { vibrateShort() },
                 isStaticModeEnabled = {
                     overlayViewModel.uiState.value.settings.automation.staticModeEnabled
+                },
+                bubbleAppearanceSettings = {
+                    overlayViewModel.uiState.value.settings.automation.bubbleAppearance
                 }
             )
             panelWindowController = PanelWindowController(
