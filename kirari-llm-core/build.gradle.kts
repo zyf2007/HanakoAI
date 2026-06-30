@@ -33,4 +33,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.okhttp.sse)
+    testImplementation(libs.junit)
+    testImplementation(libs.mockwebserver)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }

@@ -18,9 +18,11 @@ import okhttp3.MediaType.Companion.toMediaType
 
 internal class OpenAiChatAdapter(
     private val sseClient: SseStreamClient,
-    private val json: Json
+    private val json: Json,
+    private val logger: LlmLogger = NoopLlmLogger
 ) : ProviderAdapter {
     private val mediaType = "application/json; charset=utf-8".toMediaType()
+    private val tag = "KirariLlmOpenAI"
 
     override suspend fun stream(request: StreamRequest): Flow<LlmEvent> = callbackFlow {
         val payload = buildJsonObject {
@@ -55,6 +57,7 @@ internal class OpenAiChatAdapter(
         }
 
         val toolCalls = mutableMapOf<Int, PendingToolCall>()
+        var textDeltaCount = 0
 
         sseClient.stream(
             request = baseRequest(request.provider, "${request.provider.baseUrl.trimEnd('/')}/chat/completions", payload, json, mediaType),
@@ -70,7 +73,11 @@ internal class OpenAiChatAdapter(
                     val delta = choice["delta"]?.jsonObject ?: return@stream null
 
                     val textDelta = extractOpenAiContent(delta["content"])
-                    if (textDelta.isNotBlank()) {
+                    if (textDelta.isNotEmpty()) {
+                        textDeltaCount += 1
+                        if (textDeltaCount <= 20 || textDelta.any(Char::isWhitespace)) {
+                            logger.d(tag, "chat textDelta#$textDeltaCount len=${textDelta.length} text=${textDelta.visibleWhitespaceForLog()}")
+                        }
                         trySend(LlmEvent.TextDelta(textDelta))
                     }
 
@@ -85,7 +92,7 @@ internal class OpenAiChatAdapter(
                         tc.arguments.append(function["arguments"]?.jsonPrimitive?.contentOrNull.orEmpty())
                     }
 
-                    SseStreamClient.StreamEventResult(delta = textDelta.ifBlank { null })
+                    SseStreamClient.StreamEventResult(delta = textDelta.ifEmpty { null })
                 }
             },
             onDelta = {}
@@ -150,7 +157,7 @@ internal class OpenAiResponsesAdapter(
                 when (type) {
                     "response.output_text.delta" -> {
                         val delta = root["delta"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                        if (delta.isNotBlank()) {
+                        if (delta.isNotEmpty()) {
                             trySend(LlmEvent.TextDelta(delta))
                         }
                         SseStreamClient.StreamEventResult(delta = delta)
@@ -285,7 +292,7 @@ internal class AnthropicAdapter(
                         when (delta["type"]?.jsonPrimitive?.contentOrNull) {
                             "text_delta" -> {
                                 val text = delta["text"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                                if (text.isNotBlank()) {
+                                if (text.isNotEmpty()) {
                                     trySend(LlmEvent.TextDelta(text))
                                 }
                                 SseStreamClient.StreamEventResult(delta = text)
@@ -383,10 +390,10 @@ internal class GoogleAdapter(
                         toolArgs = call["args"]?.jsonObject
                     }
                 }
-                if (deltaText.isNotBlank()) {
+                if (deltaText.isNotEmpty()) {
                     trySend(LlmEvent.TextDelta(deltaText))
                 }
-                SseStreamClient.StreamEventResult(delta = deltaText.ifBlank { null })
+                SseStreamClient.StreamEventResult(delta = deltaText.ifEmpty { null })
             },
             onDelta = {}
         )

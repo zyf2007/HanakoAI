@@ -23,6 +23,7 @@ import `fun`.kirari.hanako.network.ToolDef
 import `fun`.kirari.hanako.network.ToolRegistry
 import `fun`.kirari.hanako.network.UnifiedLLMClient
 import `fun`.kirari.llm.core.LlmEvent
+import `fun`.kirari.llm.core.visibleWhitespaceForLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -148,7 +149,9 @@ internal class ProcessingPipeline(
                 else -> {}
             }
         }
-        return text.toString()
+        val result = text.toString()
+        AppDebugLogStore.d(tag, "collectTextStream resultLength=${result.length} preview=${result.visibleWhitespaceForLog(240)}")
+        return result
     }
 
     private data class StreamResult(

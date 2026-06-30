@@ -85,6 +85,10 @@ class SseStreamClient(
                 }
 
                 override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                    if (finished.get()) {
+                        response?.close()
+                        return
+                    }
                     logger.e(tag, "stream failure code=${response?.code} url=${request.url}", t)
                     response?.close()
                     val normalized = if (

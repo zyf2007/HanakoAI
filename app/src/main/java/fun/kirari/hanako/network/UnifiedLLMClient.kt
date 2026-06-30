@@ -20,7 +20,7 @@ internal class UnifiedLLMClient(
     private val json: Json = Json { ignoreUnknownKeys = true }
 ) {
     private val tag = "HanakoUnifiedLLM"
-    private val coreClient = LlmClient(clientProvider)
+    private val coreClient = LlmClient(clientProvider, HanakoLlmLogger)
 
     suspend fun stream(
         provider: ModelProviderConfig,
