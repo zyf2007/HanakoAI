@@ -98,6 +98,11 @@ internal data class MarkdownParseResult(
     val copyMarkers: List<CopyMarkerToken> = emptyList()
 )
 
+internal sealed class MarkdownRenderBlock {
+    data class Markdown(val content: String) : MarkdownRenderBlock()
+    data class DisplayMath(val latex: String) : MarkdownRenderBlock()
+}
+
 internal fun ASTNode.getText(text: String): String = text.substring(startOffset, endOffset)
 
 internal fun ASTNode.findChildRecursive(vararg types: IElementType): ASTNode? {
@@ -115,6 +120,38 @@ internal fun parseMarkdown(content: String): MarkdownParseResult {
         astTree = markdownParser.buildMarkdownTreeFromString(preprocessed),
         copyMarkers = copyMarkers
     )
+}
+
+internal fun splitDisplayMathBlocks(content: String): List<MarkdownRenderBlock> {
+    val blocks = mutableListOf<MarkdownRenderBlock>()
+    var cursor = 0
+    while (cursor < content.length) {
+        val start = content.indexOf("$$", startIndex = cursor)
+        if (start < 0) {
+            content.substring(cursor).takeIf { it.isNotEmpty() }?.let { blocks += MarkdownRenderBlock.Markdown(it) }
+            break
+        }
+        if (!content.isStandaloneMathDelimiter(start)) {
+            cursor = start + 2
+            continue
+        }
+        val end = content.indexOf("$$", startIndex = start + 2).takeIf { it >= 0 && content.isStandaloneMathDelimiter(it) }
+        if (end == null) {
+            content.substring(cursor).takeIf { it.isNotEmpty() }?.let { blocks += MarkdownRenderBlock.Markdown(it) }
+            break
+        }
+        content.substring(cursor, start).takeIf { it.isNotEmpty() }?.let { blocks += MarkdownRenderBlock.Markdown(it) }
+        blocks += MarkdownRenderBlock.DisplayMath(content.substring(start, end + 2))
+        cursor = end + 2
+    }
+    return blocks.ifEmpty { listOf(MarkdownRenderBlock.Markdown(content)) }
+}
+
+private fun String.isStandaloneMathDelimiter(index: Int): Boolean {
+    val before = lastIndexOf('\n', startIndex = index - 1).let { if (it < 0) 0 else it + 1 }
+    val after = index + 2
+    val lineEnd = indexOf('\n', startIndex = after).let { if (it < 0) length else it }
+    return substring(before, index).isBlank() && substring(after, lineEnd).isBlank()
 }
 
 internal fun extractCodeFenceContent(node: ASTNode, content: String): String {

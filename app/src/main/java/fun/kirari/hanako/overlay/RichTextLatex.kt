@@ -89,7 +89,7 @@ internal fun LatexText(
 
     if (drawable == null) {
         Text(
-            text = latex,
+            text = processLatex(latex),
             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
             modifier = modifier
         )
@@ -97,10 +97,12 @@ internal fun LatexText(
     }
 
     with(density) {
+        val widthDp = drawable.bounds.width().toDp()
+        val heightDp = drawable.bounds.height().toDp()
         Canvas(
             modifier = modifier.size(
-                width = drawable.bounds.width().toFloat().dp,
-                height = drawable.bounds.height().toFloat().dp
+                width = widthDp,
+                height = heightDp
             )
         ) {
             drawable.draw(drawContext.canvas.nativeCanvas)
@@ -129,11 +131,20 @@ private val displayBracketRegex = Regex("""^\\\[(.*?)\\\]""", RegexOption.DOT_MA
 
 internal fun processLatex(latex: String): String {
     val trimmed = latex.trim()
-    return when {
+    val content = when {
         displayDollarRegex.matches(trimmed) -> displayDollarRegex.find(trimmed)?.groupValues?.get(1)?.trim().orEmpty()
         inlineDollarRegex.matches(trimmed) -> inlineDollarRegex.find(trimmed)?.groupValues?.get(1)?.trim().orEmpty()
         displayBracketRegex.matches(trimmed) -> displayBracketRegex.find(trimmed)?.groupValues?.get(1)?.trim().orEmpty()
         inlineParenRegex.matches(trimmed) -> inlineParenRegex.find(trimmed)?.groupValues?.get(1)?.trim().orEmpty()
         else -> trimmed
     }
+    return normalizeLatexEnvironments(content)
+}
+
+private fun normalizeLatexEnvironments(latex: String): String {
+    return latex
+        .replace("""\begin{vmatrix}""", """\left|\begin{matrix}""")
+        .replace("""\end{vmatrix}""", """\end{matrix}\right|""")
+        .replace("""\begin{Vmatrix}""", """\left\|\begin{matrix}""")
+        .replace("""\end{Vmatrix}""", """\end{matrix}\right\|""")
 }

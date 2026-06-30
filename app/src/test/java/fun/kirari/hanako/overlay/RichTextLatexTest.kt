@@ -23,6 +23,14 @@ class RichTextLatexTest {
     }
 
     @Test
+    fun processLatex_normalizesVmatrixEnvironment() {
+        assertEquals(
+            """\left|\begin{matrix}1&1&1\\1&2&3\\1&3&t\end{matrix}\right|""",
+            processLatex("""$$\begin{vmatrix}1&1&1\\1&2&3\\1&3&t\end{vmatrix}$$""")
+        )
+    }
+
+    @Test
     fun preprocessMarkdown_keepsExactMatrixSourceIntact() {
         val source = """已知矩阵 \( A = \begin{bmatrix} 3 & 0 & 0 \\ 0 & a & b \\ 0 & 2 & 3 \end{bmatrix} \) 和 \( B = \begin{bmatrix} 3 & 0 & 0 \\ 0 & 4 & 0 \\ 0 & 0 & -1 \end{bmatrix} \) 相似,则 \( b = \) _ ."""
 
@@ -161,5 +169,50 @@ class RichTextLatexTest {
             result.preprocessed
         )
         assertNotNull(result.astTree.findChildRecursive(GFMElementTypes.BLOCK_MATH))
+    }
+
+    @Test
+    fun preprocessMarkdown_supportsLargeVmatrixBlockMath() {
+        val source = """
+            计算行列式：
+            \[
+            \begin{vmatrix}
+            1&1&1\\1&2&3\\1&3&t\end{vmatrix}
+            =1\begin{vmatrix}2&3\\3&t\end{vmatrix}
+            -1\begin{vmatrix}1&3\\1&t\end{vmatrix}
+            +1\begin{vmatrix}1&2\\1&3\end{vmatrix}
+            \]
+        """.trimIndent()
+
+        val result = parseMarkdown(source)
+
+        assertNotNull(result.astTree.findChildRecursive(GFMElementTypes.BLOCK_MATH))
+        val math = result.astTree.findChildRecursive(GFMElementTypes.BLOCK_MATH)!!.getText(result.preprocessed)
+        assertEquals(false, processLatex(math).contains("vmatrix"))
+        assertEquals(false, processLatex(math).contains("$$"))
+    }
+
+    @Test
+    fun splitDisplayMathBlocks_extractsStandaloneDollarBlocks() {
+        val source = """
+            计算行列式：
+            \[
+            \begin{vmatrix}
+            1&1&1\\1&2&3\\1&3&t\end{vmatrix}
+            =1\begin{vmatrix}2&3\\3&t\end{vmatrix}
+            \]
+            所以继续。
+        """.trimIndent()
+
+        val result = parseMarkdown(source)
+        val blocks = splitDisplayMathBlocks(result.preprocessed)
+
+        assertEquals(3, blocks.size)
+        assertEquals(true, blocks[0] is MarkdownRenderBlock.Markdown)
+        assertEquals(true, blocks[1] is MarkdownRenderBlock.DisplayMath)
+        assertEquals(true, blocks[2] is MarkdownRenderBlock.Markdown)
+        val math = (blocks[1] as MarkdownRenderBlock.DisplayMath).latex
+        assertEquals(false, processLatex(math).contains("$$"))
+        assertEquals(false, processLatex(math).contains("vmatrix"))
     }
 }

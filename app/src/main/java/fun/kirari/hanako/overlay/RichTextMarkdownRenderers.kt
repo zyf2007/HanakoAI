@@ -76,12 +76,25 @@ fun MarkdownLatexText(
 
     ProvideTextStyle(style) {
         Column(modifier = modifier) {
-            parsed.astTree.children.fastForEach { child ->
-                MarkdownNode(
-                    node = child,
-                    content = parsed.preprocessed,
-                    copyMarkerMap = copyMarkerMap
-                )
+            splitDisplayMathBlocks(parsed.preprocessed).fastForEach { block ->
+                when (block) {
+                    is MarkdownRenderBlock.DisplayMath -> LatexBlock(
+                        latex = block.latex,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    )
+                    is MarkdownRenderBlock.Markdown -> {
+                        val astTree = remember(block.content) {
+                            markdownParser.buildMarkdownTreeFromString(block.content)
+                        }
+                        astTree.children.fastForEach { child ->
+                            MarkdownNode(
+                                node = child,
+                                content = block.content,
+                                copyMarkerMap = copyMarkerMap
+                            )
+                        }
+                    }
+                }
             }
         }
     }
