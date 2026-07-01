@@ -133,16 +133,22 @@ enum class ScreenCaptureMethod {
 data class BubbleAppearanceSettings(
     val bubbleDiameterDp: Float = DEFAULT_BUBBLE_DIAMETER_DP,
     val spinnerDiameterDp: Float = DEFAULT_SPINNER_DIAMETER_DP,
+    val letterTextSizeDp: Float = DEFAULT_BUBBLE_LETTER_TEXT_SIZE_DP,
+    val letterOpacity: Float = DEFAULT_BUBBLE_LETTER_OPACITY,
     val overallOpacity: Float = DEFAULT_BUBBLE_OPACITY
 )
 
 const val DEFAULT_BUBBLE_DIAMETER_DP = 40f
 const val DEFAULT_SPINNER_DIAMETER_DP = 50f
+const val DEFAULT_BUBBLE_LETTER_TEXT_SIZE_DP = 28f
+const val DEFAULT_BUBBLE_LETTER_OPACITY = 100f
 const val DEFAULT_BUBBLE_OPACITY = 100f
 const val MIN_BUBBLE_DIAMETER_DP = 0f
 const val MAX_BUBBLE_DIAMETER_DP = 70f
 const val MIN_SPINNER_DIAMETER_DP = 0f
 const val MAX_SPINNER_DIAMETER_DP = 70f
+const val MIN_BUBBLE_LETTER_TEXT_SIZE_DP = 8f
+const val MAX_BUBBLE_LETTER_TEXT_SIZE_DP = 96f
 
 @Serializable
 data class AutomationSettings(
@@ -369,6 +375,11 @@ private fun BubbleAppearanceSettings.normalize(): BubbleAppearanceSettings {
     return copy(
         bubbleDiameterDp = bubbleDiameterDp.coerceIn(MIN_BUBBLE_DIAMETER_DP, MAX_BUBBLE_DIAMETER_DP),
         spinnerDiameterDp = spinnerDiameterDp.coerceIn(MIN_SPINNER_DIAMETER_DP, MAX_SPINNER_DIAMETER_DP),
+        letterTextSizeDp = letterTextSizeDp.coerceIn(
+            MIN_BUBBLE_LETTER_TEXT_SIZE_DP,
+            MAX_BUBBLE_LETTER_TEXT_SIZE_DP
+        ),
+        letterOpacity = letterOpacity.coerceIn(0f, 100f),
         overallOpacity = overallOpacity.coerceIn(0f, 100f)
     )
 }

@@ -49,6 +49,7 @@ internal class BubbleWindowController(
         val surfaceSizePx = (initialSettings.bubbleDiameterDp * density).roundToInt()
         val iconSizePx = (initialSettings.bubbleDiameterDp * density * 0.5f).roundToInt()
         val spinnerSizePx = (initialSettings.spinnerDiameterDp * density).roundToInt()
+        val letterSizePx = computeLetterLayerSizePx(initialSettings)
         val params = WindowManager.LayoutParams(
             rootSizePx,
             rootSizePx,
@@ -71,18 +72,18 @@ internal class BubbleWindowController(
             scaleType = ImageView.ScaleType.CENTER_INSIDE
         }
         val text = TextView(context).apply {
-            layoutParams = FrameLayout.LayoutParams(surfaceSizePx, surfaceSizePx, Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(letterSizePx, letterSizePx, Gravity.CENTER)
             gravity = Gravity.CENTER
-            textSize = 16f
+            textSize = initialSettings.letterTextSizeDp
             setTypeface(typeface, android.graphics.Typeface.BOLD)
+            includeFontPadding = false
             visibility = View.GONE
         }
         val surface = FrameLayout(context).apply {
             layoutParams = FrameLayout.LayoutParams(surfaceSizePx, surfaceSizePx, Gravity.CENTER)
             addView(icon)
-            addView(text)
         }
-        val view = createBubbleRoot(rootSizePx, params, spinner, surface)
+        val view = createBubbleRoot(rootSizePx, params, spinner, surface, text)
         surfaceView = surface
         iconView = icon
         textView = text
@@ -164,13 +165,15 @@ internal class BubbleWindowController(
         rootSizePx: Int,
         params: WindowManager.LayoutParams,
         spinner: ProgressBar,
-        surface: FrameLayout
+        surface: FrameLayout,
+        text: TextView
     ): FrameLayout {
         val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
         return FrameLayout(context).apply {
             layoutParams = FrameLayout.LayoutParams(rootSizePx, rootSizePx)
             addView(spinner)
             addView(surface)
+            addView(text)
             var downRawX = 0f
             var downRawY = 0f
             var startX = 0
@@ -280,9 +283,18 @@ internal class BubbleWindowController(
             }
         }
         text?.apply {
-            val textSizeSp = (settings.bubbleDiameterDp * 0.4f * appearance.sizeScale).coerceAtLeast(12f)
-            this.textSize = textSizeSp
-            alpha = overallAlpha
+            val letterSizePx = computeLetterLayerSizePx(settings)
+            (layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+                if (params.width != letterSizePx || params.height != letterSizePx) {
+                    params.width = letterSizePx
+                    params.height = letterSizePx
+                    params.gravity = Gravity.CENTER
+                    layoutParams = params
+                    requestLayout()
+                }
+            }
+            textSize = settings.letterTextSizeDp
+            alpha = (settings.letterOpacity / 100f).coerceIn(0f, 1f)
         }
         if (appearance.letters != null) {
             text?.text = appearance.letters
@@ -381,8 +393,17 @@ internal class BubbleWindowController(
 
     private fun computeRootSizePx(settings: BubbleAppearanceSettings): Int {
         val density = context.resources.displayMetrics.density
-        val contentSizePx = maxOf(settings.bubbleDiameterDp, settings.spinnerDiameterDp) * density
+        val contentSizePx = maxOf(
+            settings.bubbleDiameterDp,
+            settings.spinnerDiameterDp,
+            settings.letterTextSizeDp * 1.8f
+        ) * density
         val paddingPx = 16f * density
         return (contentSizePx + paddingPx).roundToInt()
+    }
+
+    private fun computeLetterLayerSizePx(settings: BubbleAppearanceSettings): Int {
+        val density = context.resources.displayMetrics.density
+        return (settings.letterTextSizeDp * 1.8f * density).roundToInt()
     }
 }
