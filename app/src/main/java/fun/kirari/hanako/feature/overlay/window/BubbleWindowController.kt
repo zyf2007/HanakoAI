@@ -40,6 +40,7 @@ internal class BubbleWindowController(
     private val logTag = "HanakoBubbleWindow"
     private var bubbleView: FrameLayout? = null
     private var surfaceView: FrameLayout? = null
+    private var shadowView: View? = null
     private var iconView: ImageView? = null
     private var textView: TextView? = null
     private var spinnerView: ProgressBar? = null
@@ -51,14 +52,24 @@ internal class BubbleWindowController(
         if (bubbleView != null) return
         val density = context.resources.displayMetrics.density
         val initialSettings = bubbleAppearanceSettings()
-        val rootSizePx = computeRootSizePx(initialSettings)
-        val surfaceSizePx = (initialSettings.bubbleDiameterDp * density).roundToInt()
+        // 初始尺寸按 Idle 外观计算，随后的 update(Idle) 会得到同样的结果，不会产生跳动。
+        val initialLayout = resolveLayout(
+            appearance = BubbleRenderer.render(
+                state = BubbleState.Idle,
+                launchMode = CaptureLaunchMode.NORMAL,
+                context = context,
+                staticModeEnabled = isStaticModeEnabled()
+            ),
+            settings = initialSettings,
+            text = null
+        )
+        val surfaceSizePx = initialLayout.surfaceWidthPx
         val iconSizePx = (initialSettings.bubbleDiameterDp * density * 0.5f).roundToInt()
         val spinnerSizePx = (initialSettings.spinnerDiameterDp * density).roundToInt()
-        val letterSizePx = computeLetterLayerSizePx(initialSettings)
+        val letterSizePx = initialLayout.letterLayerWidthPx
         val params = WindowManager.LayoutParams(
-            rootSizePx,
-            rootSizePx,
+            initialLayout.windowWidthPx,
+            initialLayout.windowHeightPx,
             overlayWindowType(),
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
@@ -117,8 +128,18 @@ internal class BubbleWindowController(
             layoutParams = FrameLayout.LayoutParams(surfaceSizePx, surfaceSizePx, Gravity.CENTER)
             addView(icon)
         }
-        val view = createBubbleRoot(rootSizePx, params, shadowView, spinner, surface, text, countView)
+        val view = createBubbleRoot(
+            initialLayout.windowWidthPx,
+            initialLayout.windowHeightPx,
+            params,
+            shadowView,
+            spinner,
+            surface,
+            text,
+            countView
+        )
         surfaceView = surface
+        this.shadowView = shadowView
         iconView = icon
         textView = text
         spinnerView = spinner
@@ -148,46 +169,12 @@ internal class BubbleWindowController(
             staticModeEnabled = isStaticModeEnabled()
         )
         val overallAlpha = (settings.overallOpacity / 100f).coerceIn(0f, 1f)
-        updateRootSize(settings)
-        val bubbleLayoutParams = bubble.layoutParams as? FrameLayout.LayoutParams
-        if (bubbleLayoutParams != null) {
-            val sizePx = (
-                settings.bubbleDiameterDp *
-                    context.resources.displayMetrics.density *
-                    appearance.sizeScale
-                ).roundToInt()
-            if (bubbleLayoutParams.width != sizePx || bubbleLayoutParams.height != sizePx) {
-                bubbleLayoutParams.width = sizePx
-                bubbleLayoutParams.height = sizePx
-                bubbleLayoutParams.gravity = Gravity.CENTER
-                bubble.layoutParams = bubbleLayoutParams
-                bubble.requestLayout()
-            }
-        }
-        bubble.alpha = overallAlpha
-
-        val existing = bubble.background as? GradientDrawable
-        val drawable = existing ?: GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setStroke((1.5f * context.resources.displayMetrics.density).roundToInt(), android.graphics.Color.WHITE)
-        }
-        val startColor = existing?.color?.defaultColor ?: appearance.backgroundColor
-        colorAnimator?.cancel()
-        if (appearance.animateTransitions) {
-            colorAnimator = ValueAnimator.ofArgb(startColor, appearance.backgroundColor).apply {
-                duration = 220L
-                addUpdateListener { animator ->
-                    drawable.setColor(animator.animatedValue as Int)
-                    bubble.background = drawable
-                }
-                start()
-            }
-        } else {
-            drawable.setColor(appearance.backgroundColor)
-            bubble.background = drawable
-        }
-
-        updateIconAndText(icon, text, appearance, settings, overallAlpha)
+        val layout = resolveLayout(appearance, settings, text)
+        updateWindowSize(layout)
+        updateSurfaceSize(bubble, layout, overallAlpha)
+        applySurfaceShape(bubble, appearance, layout)
+        updateShadow(layout)
+        updateIconAndText(icon, text, appearance, settings, overallAlpha, layout)
         updateSpinner(spinner, appearance, settings, overallAlpha)
         updateCaptureCount(countView, appearance)
     }
@@ -198,6 +185,7 @@ internal class BubbleWindowController(
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         bubbleView = null
         surfaceView = null
+        shadowView = null
         iconView = null
         textView = null
         spinnerView = null
@@ -214,7 +202,8 @@ internal class BubbleWindowController(
     }
 
     private fun createBubbleRoot(
-        rootSizePx: Int,
+        windowWidthPx: Int,
+        windowHeightPx: Int,
         params: WindowManager.LayoutParams,
         shadowView: android.view.View,
         spinner: ProgressBar,
@@ -224,7 +213,7 @@ internal class BubbleWindowController(
     ): FrameLayout {
         val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
         return FrameLayout(context).apply {
-            layoutParams = FrameLayout.LayoutParams(rootSizePx, rootSizePx)
+            layoutParams = FrameLayout.LayoutParams(windowWidthPx, windowHeightPx)
             addView(shadowView)
             addView(spinner)
             addView(surface)
@@ -322,7 +311,8 @@ internal class BubbleWindowController(
         text: TextView?,
         appearance: `fun`.kirari.hanako.feature.overlay.window.BubbleAppearance,
         settings: BubbleAppearanceSettings,
-        overallAlpha: Float
+        overallAlpha: Float,
+        layout: BubbleLayout
     ) {
         val iconSizePx = (
             settings.bubbleDiameterDp *
@@ -339,17 +329,20 @@ internal class BubbleWindowController(
             }
         }
         text?.apply {
-            val letterSizePx = computeLetterLayerSizePx(settings)
             (layoutParams as? FrameLayout.LayoutParams)?.let { params ->
-                if (params.width != letterSizePx || params.height != letterSizePx) {
-                    params.width = letterSizePx
-                    params.height = letterSizePx
+                if (params.width != layout.letterLayerWidthPx || params.height != layout.letterLayerHeightPx) {
+                    params.width = layout.letterLayerWidthPx
+                    params.height = layout.letterLayerHeightPx
                     params.gravity = Gravity.CENTER
                     layoutParams = params
                     requestLayout()
                 }
             }
-            textSize = settings.letterTextSizeDp
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, layout.letterTextSizePx)
+            // 多选项字母必须单行完整显示，不能被换行或省略号裁切。
+            isSingleLine = true
+            maxLines = 1
+            ellipsize = null
             alpha = (settings.letterOpacity / 100f).coerceIn(0f, 1f)
         }
         if (appearance.letters != null) {
@@ -441,30 +434,167 @@ internal class BubbleWindowController(
         }
     }
 
-    private fun updateRootSize(settings: BubbleAppearanceSettings) {
+    /**
+     * 计算当前外观对应的窗口、球体与字母层尺寸。
+     *
+     * 多选项字母时用 [TextView.paint] 实测文字宽度，保证胶囊宽度足够容纳全部选项。
+     */
+    private fun resolveLayout(
+        appearance: `fun`.kirari.hanako.feature.overlay.window.BubbleAppearance,
+        settings: BubbleAppearanceSettings,
+        text: TextView?
+    ): BubbleLayout {
+        val displayMetrics = context.resources.displayMetrics
+        val letterTextSizePx = maxOf(settings.letterTextSizeDp * displayMetrics.scaledDensity, 1f)
+        val letters = appearance.letters
+        val needsTextMeasure = appearance.shape == BubbleShape.ROUNDED_RECT && !letters.isNullOrEmpty()
+        val measured = if (needsTextMeasure && text != null) {
+            measureLetterText(text, letters.orEmpty(), letterTextSizePx)
+        } else {
+            null
+        }
+        return BubbleLayoutCalculator.calculate(
+            BubbleLayoutInput(
+                shape = appearance.shape,
+                letters = letters,
+                sizeScale = appearance.sizeScale,
+                density = displayMetrics.density,
+                screenWidthPx = displayMetrics.widthPixels,
+                bubbleDiameterDp = settings.bubbleDiameterDp,
+                spinnerDiameterDp = settings.spinnerDiameterDp,
+                letterTextSizeDp = settings.letterTextSizeDp,
+                letterTextSizePx = letterTextSizePx,
+                naturalTextWidthPx = measured?.first ?: 0f,
+                naturalTextHeightPx = measured?.second ?: 0f
+            )
+        )
+    }
+
+    /**
+     * 用字母视图自身的 [android.text.TextPaint] 实测文字尺寸，
+     * 这样字重/字体与真正渲染时完全一致。测量后恢复原字号。
+     */
+    private fun measureLetterText(text: TextView, letters: String, textSizePx: Float): Pair<Float, Float> {
+        val paint = text.paint
+        val previousTextSize = paint.textSize
+        paint.textSize = textSizePx
+        val widthPx = paint.measureText(letters)
+        val fontMetrics = paint.fontMetrics
+        val heightPx = fontMetrics.descent - fontMetrics.ascent
+        paint.textSize = previousTextSize
+        return widthPx to heightPx
+    }
+
+    /**
+     * 调整悬浮球窗口尺寸。
+     *
+     * 窗口变宽时以原中心为锚点向两侧扩展，否则气泡会随着窗口向右「滑动」；
+     * 最后把窗口夹回屏幕内，避免多选项胶囊被屏幕边缘裁切。
+     */
+    private fun updateWindowSize(layout: BubbleLayout) {
         val root = bubbleView ?: return
         val params = root.layoutParams as? WindowManager.LayoutParams ?: return
-        val nextSize = computeRootSizePx(settings)
-        if (params.width == nextSize && params.height == nextSize) return
-        params.width = nextSize
-        params.height = nextSize
+        if (params.width == layout.windowWidthPx && params.height == layout.windowHeightPx) return
+        val centerXPx = params.x + params.width / 2
+        val centerYPx = params.y + params.height / 2
+        params.width = layout.windowWidthPx
+        params.height = layout.windowHeightPx
+        params.x = centerXPx - layout.windowWidthPx / 2
+        params.y = centerYPx - layout.windowHeightPx / 2
+        val displayMetrics = context.resources.displayMetrics
+        val maxXPx = (displayMetrics.widthPixels - layout.windowWidthPx).coerceAtLeast(0)
+        val maxYPx = (displayMetrics.heightPixels - layout.windowHeightPx).coerceAtLeast(0)
+        params.x = params.x.coerceIn(0, maxXPx)
+        params.y = params.y.coerceIn(0, maxYPx)
         windowManager.updateViewLayout(root, params)
     }
 
-    private fun computeRootSizePx(settings: BubbleAppearanceSettings): Int {
-        val density = context.resources.displayMetrics.density
-        val contentSizePx = maxOf(
-            settings.bubbleDiameterDp,
-            settings.spinnerDiameterDp,
-            settings.letterTextSizeDp * 1.8f
-        ) * density
-        val paddingPx = 16f * density
-        return (contentSizePx + paddingPx).roundToInt()
+    private fun updateSurfaceSize(bubble: FrameLayout, layout: BubbleLayout, overallAlpha: Float) {
+        bubble.alpha = overallAlpha
+        val params = bubble.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (params.width == layout.surfaceWidthPx && params.height == layout.surfaceHeightPx) return
+        params.width = layout.surfaceWidthPx
+        params.height = layout.surfaceHeightPx
+        params.gravity = Gravity.CENTER
+        bubble.layoutParams = params
+        bubble.requestLayout()
     }
 
-    private fun computeLetterLayerSizePx(settings: BubbleAppearanceSettings): Int {
+    /**
+     * 应用背景形状与颜色：圆形用 [GradientDrawable.OVAL]，
+     * 多选项胶囊用整圆角的 [GradientDrawable.RECTANGLE]。
+     */
+    private fun applySurfaceShape(
+        bubble: FrameLayout,
+        appearance: `fun`.kirari.hanako.feature.overlay.window.BubbleAppearance,
+        layout: BubbleLayout
+    ) {
         val density = context.resources.displayMetrics.density
-        return (settings.letterTextSizeDp * 1.8f * density).roundToInt()
+        val existing = bubble.background as? GradientDrawable
+        val drawable = existing ?: GradientDrawable().apply {
+            setStroke((1.5f * density).roundToInt(), android.graphics.Color.WHITE)
+        }
+        val targetShape = if (layout.shape == BubbleShape.ROUNDED_RECT) {
+            GradientDrawable.RECTANGLE
+        } else {
+            GradientDrawable.OVAL
+        }
+        val targetCornerRadius = if (targetShape == GradientDrawable.RECTANGLE) {
+            layout.surfaceHeightPx / 2f
+        } else {
+            0f
+        }
+        if (drawable.shape != targetShape || drawable.cornerRadius != targetCornerRadius) {
+            drawable.shape = targetShape
+            drawable.cornerRadius = targetCornerRadius
+            bubble.background = drawable
+        }
+        val startColor = existing?.color?.defaultColor ?: appearance.backgroundColor
+        colorAnimator?.cancel()
+        if (appearance.animateTransitions) {
+            colorAnimator = ValueAnimator.ofArgb(startColor, appearance.backgroundColor).apply {
+                duration = 220L
+                addUpdateListener { animator ->
+                    drawable.setColor(animator.animatedValue as Int)
+                    bubble.background = drawable
+                }
+                start()
+            }
+        } else {
+            drawable.setColor(appearance.backgroundColor)
+            bubble.background = drawable
+        }
+    }
+
+    /**
+     * 阴影跟随球体形状，否则胶囊后面会露出一个圆形阴影。
+     */
+    private fun updateShadow(layout: BubbleLayout) {
+        val shadow = shadowView ?: return
+        val density = context.resources.displayMetrics.density
+        val strokePx = (3f * density).roundToInt()
+        val widthPx = layout.surfaceWidthPx + strokePx
+        val heightPx = layout.surfaceHeightPx + strokePx
+        (shadow.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+            if (params.width != widthPx || params.height != heightPx) {
+                params.width = widthPx
+                params.height = heightPx
+                params.gravity = Gravity.CENTER
+                shadow.layoutParams = params
+            }
+        }
+        val drawable = shadow.background as? GradientDrawable ?: return
+        val targetShape = if (layout.shape == BubbleShape.ROUNDED_RECT) {
+            GradientDrawable.RECTANGLE
+        } else {
+            GradientDrawable.OVAL
+        }
+        val targetCornerRadius = if (targetShape == GradientDrawable.RECTANGLE) heightPx / 2f else 0f
+        if (drawable.shape != targetShape || drawable.cornerRadius != targetCornerRadius) {
+            drawable.shape = targetShape
+            drawable.cornerRadius = targetCornerRadius
+            shadow.background = drawable
+        }
     }
 
     private fun updateCaptureCount(
