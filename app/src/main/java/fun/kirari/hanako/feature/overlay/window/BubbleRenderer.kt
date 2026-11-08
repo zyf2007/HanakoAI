@@ -7,6 +7,26 @@ import `fun`.kirari.hanako.platform.capture.CaptureLaunchMode
 import `fun`.kirari.hanako.feature.overlay.state.BubbleState
 
 /**
+ * 悬浮球背景形状。
+ *
+ * 单个字母或「对」「错」「√」「×」使用圆形；
+ * 多选项字母（如 `ABCD`）在圆形里必然被裁切，改用圆角矩形横向容纳。
+ */
+enum class BubbleShape {
+    CIRCLE,
+    ROUNDED_RECT
+}
+
+/**
+ * 由字母内容推导背景形状。
+ *
+ * 单字符保持圆形；多字符（只可能是 1-8 个英文字母）需要横向空间，改用圆角矩形。
+ */
+internal fun bubbleShapeForLetters(letters: String?): BubbleShape {
+    return if (letters != null && letters.length > 1) BubbleShape.ROUNDED_RECT else BubbleShape.CIRCLE
+}
+
+/**
  * 悬浮球视觉表现数据类
  */
 data class BubbleAppearance(
@@ -21,7 +41,16 @@ data class BubbleAppearance(
     val animateTransitions: Boolean = true,
     val showCaptureCount: Boolean = false,
     val captureCount: Int = 0
-)
+) {
+    /**
+     * 背景形状始终由 [letters] 推导，而不是独立字段。
+     *
+     * 这样 `copy(letters = null)`（例如菜单展开时）会自动回到圆形，
+     * 不会出现「形状是胶囊但内容已清空」的错位。
+     */
+    val shape: BubbleShape
+        get() = bubbleShapeForLetters(letters)
+}
 
 /**
  * 悬浮球渲染器
@@ -167,6 +196,7 @@ internal object BubbleRenderer {
     ): BubbleAppearance {
         val prev = if (state.previousState is BubbleState.MenuExpanded) BubbleState.Idle else state.previousState
         val baseAppearance = render(prev, launchMode, context, staticModeEnabled = false)
+        // letters 置空后 shape 会随之回到圆形，菜单入口不会残留上一个状态的胶囊形状。
         return baseAppearance.copy(
             iconRes = R.drawable.ic_bubble_menu,
             letters = null

@@ -35,4 +35,46 @@ class BubbleRendererBehaviorTest {
         )
         assertEquals("Error(boom)", BubbleRenderer.getStateDescription(BubbleState.Error("boom")))
     }
+
+    @Test
+    fun bubbleShapeForLetters_singleOptionStaysCircle() {
+        assertEquals(BubbleShape.CIRCLE, bubbleShapeForLetters("A"))
+        assertEquals(BubbleShape.CIRCLE, bubbleShapeForLetters("对"))
+        assertEquals(BubbleShape.CIRCLE, bubbleShapeForLetters("错"))
+        assertEquals(BubbleShape.CIRCLE, bubbleShapeForLetters("√"))
+        assertEquals(BubbleShape.CIRCLE, bubbleShapeForLetters("×"))
+        assertEquals(BubbleShape.CIRCLE, bubbleShapeForLetters(null))
+        assertEquals(BubbleShape.CIRCLE, bubbleShapeForLetters(""))
+    }
+
+    @Test
+    fun bubbleShapeForLetters_multipleOptionsUseRoundedRect() {
+        assertEquals(BubbleShape.ROUNDED_RECT, bubbleShapeForLetters("AB"))
+        assertEquals(BubbleShape.ROUNDED_RECT, bubbleShapeForLetters("ABCD"))
+        assertEquals(BubbleShape.ROUNDED_RECT, bubbleShapeForLetters("ABCDEFGH"))
+    }
+
+    @Test
+    fun appearanceShape_followsLettersWhenCopied() {
+        val base = appearance(letters = "ABCD")
+        assertEquals(BubbleShape.ROUNDED_RECT, base.shape)
+
+        // 菜单展开等场景会 copy(letters = null)，形状必须自动回到圆形
+        val cleared = base.copy(letters = null)
+        assertEquals(BubbleShape.CIRCLE, cleared.shape)
+
+        val single = base.copy(letters = "A")
+        assertEquals(BubbleShape.CIRCLE, single.shape)
+    }
+
+    private fun appearance(letters: String?): BubbleAppearance {
+        return BubbleAppearance(
+            backgroundColor = 0,
+            iconTint = 0,
+            iconRes = 0,
+            spinnerColor = 0,
+            showSpinner = false,
+            letters = letters
+        )
+    }
 }
