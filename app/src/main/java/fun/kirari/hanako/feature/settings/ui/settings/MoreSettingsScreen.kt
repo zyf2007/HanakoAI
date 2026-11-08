@@ -33,7 +33,6 @@ import `fun`.kirari.hanako.core.data.BubbleAppearanceSettings
 import `fun`.kirari.hanako.core.data.KirariSettings
 import `fun`.kirari.hanako.core.data.ScreenCaptureMethod
 import `fun`.kirari.hanako.feature.home.presentation.RegisterScrollToTopHandler
-import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.launch
 
 @Composable
@@ -89,17 +88,6 @@ fun MoreSettingsScreen(
                     )
                 }
             ) {
-                SwitchSettingRow(
-                    title = "悬浮窗跳过截屏(Beta)",
-                    subtitle = "开启后悬浮窗内容在截屏与录屏中不可见。需要重启悬浮球以生效。",
-                    checked = automationSettings.skipScreenshotEnabled,
-                    onCheckedChange = { enabled ->
-                        onUpdateAutomationSettings(
-                            automationSettings.copy(skipScreenshotEnabled = enabled)
-                        )
-                    },
-                    subtitleColor = Color(0xFFFF9800)
-                )
                 BubbleAppearanceSettingsCard(
                     settings = automationSettings.bubbleAppearance,
                     onChange = { bubbleAppearance ->

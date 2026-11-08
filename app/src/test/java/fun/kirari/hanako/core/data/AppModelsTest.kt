@@ -2,12 +2,35 @@ package `fun`.kirari.hanako.core.data
 
 import `fun`.kirari.hanako.core.model.ProcessingResult
 import `fun`.kirari.hanako.core.model.ProcessingRoute
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppModelsTest {
+    @Test
+    fun settings_removingScreenshotTogglePreservesLegacySettings() {
+        val json = Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
+        listOf(false, true).forEach { legacyEnabled ->
+            val settings = json.decodeFromString<AppSettings>(
+                """{"automation":{"skipScreenshotEnabled":$legacyEnabled,"autoModeTimeoutSeconds":45,"staticModeEnabled":true,"bubbleAppearance":{"bubbleDiameterDp":24}}}"""
+            )
+
+            assertEquals(45, settings.automation.autoModeTimeoutSeconds)
+            assertTrue(settings.automation.staticModeEnabled)
+            assertEquals(24f, settings.automation.bubbleAppearance.bubbleDiameterDp, 0f)
+            val savedAutomation = json.encodeToJsonElement(AppSettings.serializer(), settings)
+                .jsonObject.getValue("automation").jsonObject
+            assertFalse(savedAutomation.containsKey("skipScreenshotEnabled"))
+        }
+    }
+
     @Test
     fun normalize_advancesHistoryDataSchemaForQuoteFields() {
         assertEquals(StorageSchema.CURRENT_APP_DATA_VERSION, AppSettings(schemaVersion = 2).normalize().schemaVersion)
