@@ -15,6 +15,8 @@ import androidx.core.app.NotificationCompat
 import `fun`.kirari.hanako.R
 import `fun`.kirari.hanako.core.data.AutomationSettings
 import `fun`.kirari.hanako.core.debug.AppDebugLogStore
+import `fun`.kirari.hanako.core.model.AutomationActionRecord
+import `fun`.kirari.hanako.core.model.AutomationActionType
 import kotlinx.coroutines.delay
 
 internal fun OverlayService.buildNotification(mainActivityIntent: Intent): Notification {
@@ -33,11 +35,15 @@ internal fun OverlayService.buildNotification(mainActivityIntent: Intent): Notif
         .build()
 }
 
-internal fun OverlayService.notifyAutomationCompleted(label: String?, mainActivityIntent: Intent) {
-    val content = label?.take(32)?.let { "已复制：$it" } ?: "自动模式已完成"
+internal fun OverlayService.notifyAutomationCompleted(action: AutomationActionRecord, mainActivityIntent: Intent) {
+    val content = when (action.type) {
+        AutomationActionType.SET_CLIPBOARD -> getString(R.string.overlay_automation_copied_answer, action.text)
+        AutomationActionType.SHOW_BUBBLE_LETTERS -> getString(R.string.overlay_automation_answer, action.text)
+    }
     val notification = NotificationCompat.Builder(this, OverlayService.AUTOMATION_CHANNEL_ID)
         .setContentTitle(getString(R.string.overlay_automation_done_title))
         .setContentText(content)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(content))
         .setSmallIcon(R.mipmap.ic_launcher_round)
         .setAutoCancel(true)
         .setContentIntent(

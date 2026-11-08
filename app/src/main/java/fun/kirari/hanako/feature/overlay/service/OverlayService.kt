@@ -138,8 +138,8 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                 scope = serviceScope,
                 viewModel = overlayViewModel,
                 solveOperations = dependencies.solveOperations,
-                onNotifyAutomationCompleted = { label ->
-                    notifyAutomationCompleted(label, dependencies.mainActivityIntent(this))
+                onNotifyAutomationCompleted = { action ->
+                    notifyAutomationCompleted(action, dependencies.mainActivityIntent(this))
                 },
                 onVibrateLetters = { letters, settings -> vibrateLetters(letters, settings) }
             )

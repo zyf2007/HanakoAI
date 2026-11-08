@@ -5,6 +5,7 @@ import `fun`.kirari.hanako.core.debug.AppDebugLogStore
 import `fun`.kirari.hanako.feature.overlay.presentation.OverlayViewModel
 import `fun`.kirari.hanako.platform.clipboard.copyToClipboard
 import `fun`.kirari.hanako.solve.application.SolveOperations
+import `fun`.kirari.hanako.core.model.AutomationActionRecord
 import `fun`.kirari.hanako.core.model.AutomationActionType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -20,7 +21,7 @@ internal class OverlayAutomationEffectObserver(
     private val scope: CoroutineScope,
     private val viewModel: OverlayViewModel,
     private val solveOperations: SolveOperations,
-    private val onNotifyAutomationCompleted: (String?) -> Unit,
+    private val onNotifyAutomationCompleted: (AutomationActionRecord) -> Unit,
     private val onVibrateLetters: suspend (String, `fun`.kirari.hanako.core.data.AutomationSettings) -> Unit
 ) {
     private val tag = "HanakoAutomationEffects"
@@ -55,9 +56,7 @@ internal class OverlayAutomationEffectObserver(
                             }
                             viewModel.presentAutomationEffect(claimed)
                             if (settings.automation.completionNotificationEnabled) {
-                                onNotifyAutomationCompleted(
-                                    action.text.takeIf { action.type == AutomationActionType.SET_CLIPBOARD }
-                                )
+                                onNotifyAutomationCompleted(action)
                             }
                             withContext(NonCancellable) {
                                 solveOperations.completeAutomationAction(claimed.id)
