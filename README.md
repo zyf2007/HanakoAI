@@ -2,7 +2,7 @@
 
 Hanako 是一个 Android 悬浮窗 AI 客户端，核心用途是截图识题与快速作答。默认助手提示词偏向搜题场景，也可以在应用内改成翻译、总结、阅读辅助等其他用途。
 
-[[Download 0.0.18-alpha](https://github.com/zyf2007/HanakoAI/releases/download/v0.0.18-alpha/app-lite-arm64-v8a-release.apk)]  [[View Release Notes](https://github.com/zyf2007/HanakoAI/releases/tag/v0.0.18-alpha)] [[Telegram](https://t.me/hutao_space)]
+[[Download 0.0.19-alpha](https://github.com/zyf2007/HanakoAI/releases/download/v0.0.19-alpha/app-lite-arm64-v8a-release.apk)]  [[View Release Notes](https://github.com/zyf2007/HanakoAI/releases/tag/v0.0.19-alpha)] [[Telegram](https://t.me/hutao_space)]
 
 Hanako 把截图、识题、解题、复制/填写这几个步骤压缩到尽可能短：
 
@@ -193,7 +193,7 @@ Hanako 把截图、识题、解题、复制/填写这几个步骤压缩到尽可
 
 ## Changelog
 
-- 历史记录支持长按或点击已引用内容块，快速定位并查看对应题目与回答。
-- 新增 Markdown 内容块引用流程，可在追问中携带多个引用片段，并显示引用关系。
-- 引用菜单新增复制、引用和关闭操作，适配数学公式内容的尺寸与预览定位。
-- 统一历史记录与模型提供方的数据存储权威，补充答案版本 ID 迁移和架构回归测试。
+- 多选题答案在悬浮球中以自适应宽度的胶囊显示，保持字母单行，过宽时自动缩小字号。
+- 修复悬浮球缩小时残留圆形或方形阴影的问题；阴影跟随球体尺寸、形状和整体透明度，直径为 0 时隐藏。
+- 自动模式完成通知直接显示选择题答案或已复制内容，长答案支持展开查看。
+- Android 12 及以上版本默认在截屏和录屏中隐藏悬浮球、菜单及面板，并移除原 Beta 开关。
