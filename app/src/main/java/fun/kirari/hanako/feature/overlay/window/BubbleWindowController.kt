@@ -171,7 +171,7 @@ internal class BubbleWindowController(
         updateWindowSize(layout)
         updateSurfaceSize(bubble, layout, overallAlpha)
         applySurfaceShape(bubble, appearance, layout)
-        updateShadow(layout, overallAlpha)
+        updateShadow(layout, settings)
         updateIconAndText(icon, text, appearance, settings, overallAlpha, layout)
         updateSpinner(spinner, appearance, settings, overallAlpha)
         updateCaptureCount(countView, appearance)
@@ -567,9 +567,10 @@ internal class BubbleWindowController(
     /**
      * 阴影跟随球体形状，否则胶囊后面会露出一个圆形阴影。
      */
-    private fun updateShadow(layout: BubbleLayout, overallAlpha: Float) {
+    private fun updateShadow(layout: BubbleLayout, settings: BubbleAppearanceSettings) {
         val shadow = shadowView ?: return
-        shadow.visibility = if (layout.surfaceWidthPx > 0 && layout.surfaceHeightPx > 0) View.VISIBLE else View.GONE
+        shadow.visibility = if (settings.bubbleDiameterDp > 0f) View.VISIBLE else View.GONE
+        val overallAlpha = (settings.overallOpacity / 100f).coerceIn(0f, 1f)
         shadow.alpha = 0.45f * overallAlpha
         val density = context.resources.displayMetrics.density
         val strokePx = (3f * density).roundToInt()
