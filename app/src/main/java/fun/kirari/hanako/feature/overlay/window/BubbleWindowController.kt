@@ -40,6 +40,7 @@ internal class BubbleWindowController(
     private val logTag = "HanakoBubbleWindow"
     private var bubbleView: FrameLayout? = null
     private var surfaceView: FrameLayout? = null
+    private var shadowView: View? = null
     private var iconView: ImageView? = null
     private var textView: TextView? = null
     private var spinnerView: ProgressBar? = null
@@ -67,15 +68,13 @@ internal class BubbleWindowController(
             x = 32
             y = 360
         }
-        val shadowSizePx = surfaceSizePx + (3f * density).roundToInt()
         val shadowView = android.view.View(context).apply {
-            layoutParams = FrameLayout.LayoutParams(shadowSizePx, shadowSizePx, Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(0, 0, Gravity.CENTER)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(android.graphics.Color.parseColor("#20000000"))
             }
             translationY = 1.5f * density
-            alpha = 0.45f
         }
         val countSizePx = (18f * density).roundToInt()
         val countView = TextView(context).apply {
@@ -119,6 +118,7 @@ internal class BubbleWindowController(
         }
         val view = createBubbleRoot(rootSizePx, params, shadowView, spinner, surface, text, countView)
         surfaceView = surface
+        this.shadowView = shadowView
         iconView = icon
         textView = text
         spinnerView = spinner
@@ -149,13 +149,13 @@ internal class BubbleWindowController(
         )
         val overallAlpha = (settings.overallOpacity / 100f).coerceIn(0f, 1f)
         updateRootSize(settings)
+        val sizePx = (
+            settings.bubbleDiameterDp *
+                context.resources.displayMetrics.density *
+                appearance.sizeScale
+            ).roundToInt()
         val bubbleLayoutParams = bubble.layoutParams as? FrameLayout.LayoutParams
         if (bubbleLayoutParams != null) {
-            val sizePx = (
-                settings.bubbleDiameterDp *
-                    context.resources.displayMetrics.density *
-                    appearance.sizeScale
-                ).roundToInt()
             if (bubbleLayoutParams.width != sizePx || bubbleLayoutParams.height != sizePx) {
                 bubbleLayoutParams.width = sizePx
                 bubbleLayoutParams.height = sizePx
@@ -165,6 +165,7 @@ internal class BubbleWindowController(
             }
         }
         bubble.alpha = overallAlpha
+        updateShadow(sizePx, overallAlpha)
 
         val existing = bubble.background as? GradientDrawable
         val drawable = existing ?: GradientDrawable().apply {
@@ -198,6 +199,7 @@ internal class BubbleWindowController(
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         bubbleView = null
         surfaceView = null
+        shadowView = null
         iconView = null
         textView = null
         spinnerView = null
@@ -449,6 +451,19 @@ internal class BubbleWindowController(
         params.width = nextSize
         params.height = nextSize
         windowManager.updateViewLayout(root, params)
+    }
+
+    private fun updateShadow(bubbleSizePx: Int, overallAlpha: Float) {
+        val shadow = shadowView ?: return
+        shadow.visibility = if (bubbleSizePx > 0) View.VISIBLE else View.GONE
+        shadow.alpha = 0.45f * overallAlpha
+        val sizePx = bubbleSizePx + (3f * context.resources.displayMetrics.density).roundToInt()
+        val params = shadow.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (params.width != sizePx || params.height != sizePx) {
+            params.width = sizePx
+            params.height = sizePx
+            shadow.layoutParams = params
+        }
     }
 
     private fun computeRootSizePx(settings: BubbleAppearanceSettings): Int {
